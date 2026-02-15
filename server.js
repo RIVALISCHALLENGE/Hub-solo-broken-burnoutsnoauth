@@ -4,6 +4,7 @@ const { randomUUID } = require('crypto');
 
 const { registerChatRoutes, getOpenAIClientExported } = require("./replit_integrations/chat");
 const { registerImageRoutes } = require("./replit_integrations/image");
+const { registerLiveEngineSyncRoutes } = require("./replit_integrations/live-engine-sync");
 const { WebhookHandlers } = require("./stripe/webhookHandlers");
 const { getUncachableStripeClient, getStripePublishableKey, getStripeSync } = require("./stripe/stripeClient");
 const { runMigrations } = require('stripe-replit-sync');
@@ -129,62 +130,22 @@ app.get('/api/stripe/products', async (req, res) => {
       if (row.price_id) {
         productsMap.get(row.product_id).prices.push({
           id: row.price_id,
-          unit_amount: row.unit_amount,
+          unitAmount: row.unit_amount,
           currency: row.currency,
           recurring: row.recurring,
+          active: row.price_active
         });
       }
     }
+
     res.json({ products: Array.from(productsMap.values()) });
   } catch (error) {
-    console.error('Error listing products:', error);
-    res.status(500).json({ error: 'Failed to list products' });
+    console.error('Error fetching products:', error);
+    res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
 
-app.post('/api/stripe/checkout', verifyFirebaseToken, async (req, res) => {
-  try {
-    const { priceId } = req.body;
-    if (!priceId) return res.status(400).json({ error: 'priceId required' });
-
-    const { db } = require('./src/firebase_server');
-    const userDoc = await db.collection('users').doc(req.user.uid).get();
-    const userData = userDoc.exists ? userDoc.data() : {};
-
-    const stripe = await getUncachableStripeClient();
-
-    let customerId = userData.stripeCustomerId;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: req.user.email,
-        metadata: { firebaseUid: req.user.uid },
-      });
-      customerId = customer.id;
-      await db.collection('users').doc(req.user.uid).set(
-        { stripeCustomerId: customerId },
-        { merge: true }
-      );
-    }
-
-    const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      payment_method_types: ['card'],
-      line_items: [{ price: priceId, quantity: 1 }],
-      mode: 'subscription',
-      success_url: `${baseUrl}/subscription?success=true`,
-      cancel_url: `${baseUrl}/subscription?canceled=true`,
-      metadata: { firebaseUid: req.user.uid },
-    });
-
-    res.json({ url: session.url });
-  } catch (error) {
-    console.error('Checkout error:', error);
-    res.status(500).json({ error: 'Failed to create checkout session' });
-  }
-});
-
-app.get('/api/stripe/subscription', verifyFirebaseToken, async (req, res) => {
+app.get('/api/subscription/current', verifyFirebaseToken, async (req, res) => {
   try {
     const { db } = require('./src/firebase_server');
     const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -211,33 +172,73 @@ app.get('/api/stripe/subscription', verifyFirebaseToken, async (req, res) => {
     await db.collection('users').doc(req.user.uid).set(
       { 
         subscriptionStatus: isActive ? 'active' : 'inactive',
-        subscriptionId: sub?.id || null,
+        subscriptionUpdatedAt: new Date()
       },
       { merge: true }
     );
 
     res.json({ subscription: sub });
   } catch (error) {
-    console.error('Subscription check error:', error);
-    res.status(500).json({ error: 'Failed to check subscription' });
+    console.error('Error fetching subscription:', error);
+    res.status(500).json({ error: 'Failed to fetch subscription' });
   }
 });
 
-app.post('/api/stripe/portal', verifyFirebaseToken, async (req, res) => {
+app.post('/api/checkout-session', verifyFirebaseToken, async (req, res) => {
+  try {
+    const { db } = require('./src/firebase_server');
+    const userDoc = await db.collection('users').doc(req.user.uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+
+    let customerId = userData.stripeCustomerId;
+
+    const stripeClient = await getUncachableStripeClient();
+    if (!customerId) {
+      const customer = await stripeClient.customers.create({
+        email: req.user.email,
+      });
+      customerId = customer.id;
+      await db.collection('users').doc(req.user.uid).set({
+        stripeCustomerId: customerId,
+      }, { merge: true });
+    }
+
+    const { priceId } = req.body;
+    const session = await stripeClient.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/subscription?success=true`,
+      cancel_url: `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/subscription?success=false`,
+    });
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('Checkout error:', error);
+    res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+app.post('/api/customer-portal', verifyFirebaseToken, async (req, res) => {
   try {
     const { db } = require('./src/firebase_server');
     const userDoc = await db.collection('users').doc(req.user.uid).get();
     const userData = userDoc.exists ? userDoc.data() : {};
 
     if (!userData.stripeCustomerId) {
-      return res.status(400).json({ error: 'No subscription found' });
+      return res.status(400).json({ error: 'No Stripe customer' });
     }
 
-    const stripe = await getUncachableStripeClient();
-    const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    const session = await stripe.billingPortal.sessions.create({
+    const stripeClient = await getUncachableStripeClient();
+    const session = await stripeClient.billingPortal.sessions.create({
       customer: userData.stripeCustomerId,
-      return_url: `${baseUrl}/subscription`,
+      return_url: `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/subscription`,
     });
 
     res.json({ url: session.url });
@@ -333,6 +334,7 @@ CRITICAL: You may ONLY recommend exercises from this approved list (all bodyweig
 - Core: Crunches, Plank, Russian Twists, Leg Raises
 - Cardio: Jumping Jacks, High Knees, Burpees, Mountain Climbers
 - Running: Outdoor runs (tracked in Run Mode)
+
 Do NOT suggest dumbbells, resistance bands, barbells, kettlebells, machines, pull-up bars, or any equipment.
 
 Generate a FULL detailed plan with:
@@ -411,6 +413,11 @@ app.get("/objects/:type/:id", async (req, res) => {
     const { type, id } = req.params;
     const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
     const privateDir = process.env.PRIVATE_OBJECT_DIR;
+    
+    if (!bucketId || !privateDir) {
+      return res.status(500).json({ error: "Object storage not configured" });
+    }
+
     const objectName = `${privateDir}/${type}/${id}`;
 
     const request = {
@@ -443,7 +450,6 @@ app.post("/api/admin/raffle-draw", async (req, res) => {
   if (authHeader !== `Bearer ${process.env.ADMIN_SECRET}`) {
     return res.status(403).json({ error: "Unauthorized" });
   }
-
   try {
     const { runRaffle } = require('./scripts/raffle_draw');
     const result = await runRaffle();
@@ -509,18 +515,14 @@ app.post("/api/admin/user-action", async (req, res) => {
   if (authHeader !== `Bearer ${process.env.ADMIN_SECRET}`) {
     return res.status(403).json({ error: "Unauthorized" });
   }
-
-  const { userId, action, data } = req.body;
+  const { action, userId } = req.body;
   try {
     const { db } = require('./src/firebase_server');
-    const userRef = db.collection('users').doc(userId);
-    
-    let update = { updatedAt: new Date() };
-    if (action === 'ban') update.isBanned = data.value;
-    if (action === 'mute') update.isMuted = data.value;
-    if (action === 'warn') update.lastWarning = data.message;
-
-    await userRef.update(update);
+    await db.collection('admin_actions').add({
+      action,
+      userId,
+      timestamp: new Date()
+    });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -532,7 +534,6 @@ app.post("/api/admin/delete-message", async (req, res) => {
   if (authHeader !== `Bearer ${process.env.ADMIN_SECRET}`) {
     return res.status(403).json({ error: "Unauthorized" });
   }
-
   const { messageId, collection } = req.body;
   try {
     const { db } = require('./src/firebase_server');
@@ -597,6 +598,9 @@ app.post("/api/admin/broadcast", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Register Live Engine Sync Routes
+registerLiveEngineSyncRoutes(app);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
