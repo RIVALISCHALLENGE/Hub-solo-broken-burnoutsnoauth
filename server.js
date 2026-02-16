@@ -49,29 +49,48 @@ app.post(
   async (req, res) => {
     const signature = req.headers['stripe-signature'];
     if (!signature) {
-      return res.status(400).json({ error: 'Missing stripe-signature' });
+      return sendStripeError(res, 400, 'Missing Stripe signature');
     }
     try {
       const sig = Array.isArray(signature) ? signature[0] : signature;
       if (!Buffer.isBuffer(req.body)) {
         console.error('STRIPE WEBHOOK ERROR: req.body is not a Buffer.');
-        return res.status(500).json({ error: 'Webhook processing error' });
+        return sendStripeError(res, 500, 'Failed to process Stripe webhook');
       }
       await WebhookHandlers.processWebhook(req.body, sig);
       res.status(200).json({ received: true });
     } catch (error) {
       console.error('Webhook error:', error.message);
-      res.status(400).json({ error: 'Webhook processing error' });
+      sendStripeError(res, 400, 'Failed to process Stripe webhook');
     }
   }
 );
 
 app.use(express.json());
 
+function getAppBaseUrl(req) {
+  const configuredDomain = process.env.REPLIT_DOMAINS?.split(',')[0];
+  if (configuredDomain) {
+    return `https://${configuredDomain}`;
+  }
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol = Array.isArray(forwardedProto)
+    ? forwardedProto[0]
+    : (forwardedProto || req.protocol || 'http');
+
+  const host = req.headers.host;
+  if (host) {
+    return `${protocol}://${host}`;
+  }
+
+  return 'http://localhost:5000';
+}
+
 async function verifyFirebaseToken(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return sendAuthError(res);
   }
   try {
     const token = authHeader.split('Bearer ')[1];
@@ -80,8 +99,55 @@ async function verifyFirebaseToken(req, res, next) {
     req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
+    return sendAuthError(res);
   }
+}
+
+async function resolveStripeCustomer(req, { createIfMissing = false } = {}) {
+  const { db } = require('./src/firebase_server');
+  const userRef = db.collection('users').doc(req.user.uid);
+  const userDoc = await userRef.get();
+  const userData = userDoc.exists ? userDoc.data() : {};
+
+  let customerId = userData.stripeCustomerId || null;
+  const stripeClient = await getUncachableStripeClient();
+
+  if (!customerId) {
+    if (!createIfMissing) {
+      return { stripeClient, customerId: null };
+    }
+
+    const customer = await stripeClient.customers.create({
+      email: req.user.email,
+      metadata: {
+        firebaseUid: req.user.uid,
+      },
+    });
+
+    customerId = customer.id;
+    await userRef.set(
+      {
+        stripeCustomerId: customerId,
+      },
+      { merge: true }
+    );
+  } else {
+    await stripeClient.customers.update(customerId, {
+      metadata: {
+        firebaseUid: req.user.uid,
+      },
+    });
+  }
+
+  return { stripeClient, customerId };
+}
+
+function sendStripeError(res, status, message) {
+  return res.status(status).json({ error: message });
+}
+
+function sendAuthError(res) {
+  return res.status(401).json({ error: 'Unauthorized' });
 }
 
 app.get('/api/stripe/publishable-key', async (req, res) => {
@@ -90,7 +156,7 @@ app.get('/api/stripe/publishable-key', async (req, res) => {
     res.json({ publishableKey: key });
   } catch (error) {
     console.error('Error getting publishable key:', error);
-    res.status(500).json({ error: 'Failed to get publishable key' });
+    sendStripeError(res, 500, 'Failed to fetch Stripe publishable key');
   }
 });
 
@@ -141,7 +207,7 @@ app.get('/api/stripe/products', async (req, res) => {
     res.json({ products: Array.from(productsMap.values()) });
   } catch (error) {
     console.error('Error fetching products:', error);
-    res.status(500).json({ error: 'Failed to fetch products' });
+    sendStripeError(res, 500, 'Failed to fetch Stripe products');
   }
 });
 
@@ -184,26 +250,57 @@ app.get('/api/subscription/current', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-app.post('/api/checkout-session', verifyFirebaseToken, async (req, res) => {
+app.get('/api/stripe/subscription', verifyFirebaseToken, async (req, res) => {
   try {
     const { db } = require('./src/firebase_server');
     const userDoc = await db.collection('users').doc(req.user.uid).get();
     const userData = userDoc.exists ? userDoc.data() : {};
 
-    let customerId = userData.stripeCustomerId;
-
-    const stripeClient = await getUncachableStripeClient();
-    if (!customerId) {
-      const customer = await stripeClient.customers.create({
-        email: req.user.email,
-      });
-      customerId = customer.id;
-      await db.collection('users').doc(req.user.uid).set({
-        stripeCustomerId: customerId,
-      }, { merge: true });
+    if (!userData.stripeCustomerId) {
+      return res.json({ subscription: null });
     }
 
-    const { priceId } = req.body;
+    const { Pool } = require('pg');
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+    const result = await pool.query(
+      `SELECT id, status, current_period_start, current_period_end, cancel_at_period_end, items
+       FROM stripe.subscriptions
+       WHERE customer = $1 AND status IN ('active', 'trialing', 'past_due')
+       ORDER BY current_period_end DESC LIMIT 1`,
+      [userData.stripeCustomerId]
+    );
+    await pool.end();
+
+    const sub = result.rows[0] || null;
+    const isActive = sub && (sub.status === 'active' || sub.status === 'trialing');
+
+    await db.collection('users').doc(req.user.uid).set(
+      {
+        subscriptionStatus: isActive ? 'active' : 'inactive',
+        subscriptionUpdatedAt: new Date()
+      },
+      { merge: true }
+    );
+
+    res.json({ subscription: sub });
+  } catch (error) {
+    console.error('Error fetching subscription:', error);
+    sendStripeError(res, 500, 'Failed to fetch Stripe subscription');
+  }
+});
+
+app.post('/api/stripe/checkout', verifyFirebaseToken, async (req, res) => {
+  try {
+    const { priceId } = req.body || {};
+    if (!priceId) {
+      return sendStripeError(res, 400, 'Missing required field: priceId');
+    }
+
+    const { stripeClient, customerId } = await resolveStripeCustomer(req, {
+      createIfMissing: true,
+    });
+
+    const baseUrl = getAppBaseUrl(req);
     const session = await stripeClient.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
@@ -214,37 +311,76 @@ app.post('/api/checkout-session', verifyFirebaseToken, async (req, res) => {
         },
       ],
       mode: 'subscription',
-      success_url: `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/subscription?success=true`,
-      cancel_url: `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/subscription?success=false`,
+      success_url: `${baseUrl}/subscription?success=true`,
+      cancel_url: `${baseUrl}/subscription?canceled=true`,
     });
 
     res.json({ url: session.url });
   } catch (error) {
     console.error('Checkout error:', error);
-    res.status(500).json({ error: 'Failed to create checkout session' });
+    sendStripeError(res, 500, 'Failed to create Stripe checkout session');
   }
 });
 
-app.post('/api/customer-portal', verifyFirebaseToken, async (req, res) => {
+app.post('/api/stripe/custom-checkout', verifyFirebaseToken, async (req, res) => {
   try {
-    const { db } = require('./src/firebase_server');
-    const userDoc = await db.collection('users').doc(req.user.uid).get();
-    const userData = userDoc.exists ? userDoc.data() : {};
-
-    if (!userData.stripeCustomerId) {
-      return res.status(400).json({ error: 'No Stripe customer' });
+    const { priceId } = req.body || {};
+    if (!priceId) {
+      return sendStripeError(res, 400, 'Missing required field: priceId');
     }
 
-    const stripeClient = await getUncachableStripeClient();
+    const { stripeClient, customerId } = await resolveStripeCustomer(req, {
+      createIfMissing: true,
+    });
+
+    const subscription = await stripeClient.subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceId }],
+      payment_behavior: 'default_incomplete',
+      payment_settings: {
+        save_default_payment_method: 'on_subscription',
+      },
+      expand: ['latest_invoice.payment_intent'],
+    });
+
+    const paymentIntent = subscription.latest_invoice?.payment_intent;
+    const clientSecret = paymentIntent?.client_secret;
+
+    if (!clientSecret) {
+      return sendStripeError(res, 500, 'Failed to initialize Stripe payment');
+    }
+
+    res.json({
+      clientSecret,
+      subscriptionId: subscription.id,
+      customerId,
+    });
+  } catch (error) {
+    console.error('Custom checkout error:', error);
+    sendStripeError(res, 500, 'Failed to create Stripe custom checkout');
+  }
+});
+
+app.post('/api/stripe/portal', verifyFirebaseToken, async (req, res) => {
+  try {
+    const { stripeClient, customerId } = await resolveStripeCustomer(req, {
+      createIfMissing: false,
+    });
+
+    if (!customerId) {
+      return sendStripeError(res, 400, 'No Stripe customer found');
+    }
+
+    const baseUrl = getAppBaseUrl(req);
     const session = await stripeClient.billingPortal.sessions.create({
-      customer: userData.stripeCustomerId,
-      return_url: `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}/subscription`,
+      customer: customerId,
+      return_url: `${baseUrl}/subscription`,
     });
 
     res.json({ url: session.url });
   } catch (error) {
     console.error('Portal error:', error);
-    res.status(500).json({ error: 'Failed to create portal session' });
+    sendStripeError(res, 500, 'Failed to create Stripe billing portal session');
   }
 });
 
@@ -257,7 +393,36 @@ app.post('/api/generate-plan', verifyFirebaseToken, async (req, res) => {
     const { db } = require('./src/firebase_server');
     const userDoc = await db.collection('users').doc(req.user.uid).get();
     const userData = userDoc.exists ? userDoc.data() : {};
-    const isPro = userData.subscriptionStatus === 'active';
+    let isPro = userData.subscriptionStatus === 'active';
+
+    if (!isPro && userData.stripeCustomerId && process.env.DATABASE_URL) {
+      try {
+        const { Pool } = require('pg');
+        const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+        const result = await pool.query(
+          `SELECT id, status
+           FROM stripe.subscriptions
+           WHERE customer = $1 AND status IN ('active', 'trialing', 'past_due')
+           ORDER BY current_period_end DESC LIMIT 1`,
+          [userData.stripeCustomerId]
+        );
+        await pool.end();
+
+        const sub = result.rows[0] || null;
+        isPro = Boolean(sub && (sub.status === 'active' || sub.status === 'trialing'));
+
+        await db.collection('users').doc(req.user.uid).set(
+          {
+            subscriptionStatus: isPro ? 'active' : 'inactive',
+            subscriptionId: sub?.id || null,
+            subscriptionUpdatedAt: new Date(),
+          },
+          { merge: true }
+        );
+      } catch (subError) {
+        console.error('Subscription entitlement refresh failed:', subError.message);
+      }
+    }
 
     const goalsText = Array.isArray(fitnessGoals) && fitnessGoals.length > 0
       ? fitnessGoals.join(", ")

@@ -104,7 +104,7 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
                     setSessionActive(false);
                     finalizeSession(userId, totalReps, ticketsEarned, muscleGroup);
                     if (onSessionEnd) {
-                        onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
+                        onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup, type: 'rep' });
                     }
                     return prevIndex;
                 }
@@ -152,7 +152,7 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
         setSessionActive(false);
         finalizeSession(userId, totalReps, ticketsEarned, muscleGroup);
         if (onSessionEnd) {
-            onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
+            onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup, type: 'rep' });
         }
     }, [userId, totalReps, ticketsEarned, muscleGroup, onSessionEnd, timeElapsed]);
 
@@ -204,7 +204,7 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
                 </div>
 
                 <div className="burnouts-controls">
-                    <button className="burnouts-primary-btn" onClick={handleStopSession}>STOP SESSION</button>
+                    <button className="burnouts-primary-btn" onClick={handleStopSession}>END SESSION</button>
                 </div>
 
                 {sessionActive && currentCard && (

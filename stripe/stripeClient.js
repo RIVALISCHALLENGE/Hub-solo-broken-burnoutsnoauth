@@ -1,8 +1,44 @@
 const Stripe = require('stripe');
+const fs = require('fs');
+const path = require('path');
 
 let connectionSettings = null;
+let localEnvCache = null;
+
+function getLocalEnvValue(key) {
+  if (localEnvCache === null) {
+    localEnvCache = {};
+    const envPath = path.resolve(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf8');
+      envContent.split('\n').forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return;
+
+        const separatorIndex = trimmed.indexOf('=');
+        if (separatorIndex < 0) return;
+
+        const envKey = trimmed.slice(0, separatorIndex).trim();
+        const envValue = trimmed.slice(separatorIndex + 1).trim();
+        localEnvCache[envKey] = envValue;
+      });
+    }
+  }
+
+  return localEnvCache[key];
+}
 
 async function getCredentials() {
+  const envSecretKey = process.env.STRIPE_SECRET_KEY || getLocalEnvValue('STRIPE_SECRET_KEY');
+  const envPublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || getLocalEnvValue('STRIPE_PUBLISHABLE_KEY');
+
+  if (envSecretKey) {
+    return {
+      publishableKey: envPublishableKey || null,
+      secretKey: envSecretKey,
+    };
+  }
+
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? 'repl ' + process.env.REPL_IDENTITY
@@ -11,7 +47,9 @@ async function getCredentials() {
       : null;
 
   if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+    throw new Error(
+      'Stripe credentials not found. Set STRIPE_SECRET_KEY (and STRIPE_PUBLISHABLE_KEY) for local/dev, or configure Replit connector credentials.'
+    );
   }
 
   const connectorName = 'stripe';
@@ -52,6 +90,9 @@ async function getUncachableStripeClient() {
 
 async function getStripePublishableKey() {
   const { publishableKey } = await getCredentials();
+  if (!publishableKey) {
+    throw new Error('Stripe publishable key not found. Set STRIPE_PUBLISHABLE_KEY or configure the Replit Stripe connector.');
+  }
   return publishableKey;
 }
 

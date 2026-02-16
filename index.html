@@ -16,9 +16,17 @@
 
     <script>
       if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker.register("/sw.js");
-        });
+        const isLocalhost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+
+        if (isLocalhost) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            registrations.forEach((registration) => registration.unregister());
+          });
+        } else {
+          window.addEventListener("load", () => {
+            navigator.serviceWorker.register("/sw.js");
+          });
+        }
       }
     </script>
   </head>

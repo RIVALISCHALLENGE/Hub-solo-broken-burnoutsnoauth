@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import { SubscriptionService } from "../services/subscriptionService.js";
 import { useTheme } from "../context/ThemeContext.jsx";
 
@@ -11,6 +13,12 @@ export default function Subscription({ user, userProfile }) {
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(null);
+  const [publishableKey, setPublishableKey] = useState("");
+  const [stripePromise, setStripePromise] = useState(null);
+  const [clientSecret, setClientSecret] = useState("");
+  const [selectedPriceId, setSelectedPriceId] = useState(null);
+  const [paymentError, setPaymentError] = useState("");
+  const [checkoutInfo, setCheckoutInfo] = useState("");
   const [billingPeriod, setBillingPeriod] = useState("month");
   const [showSuccess, setShowSuccess] = useState(false);
   const [showCanceled, setShowCanceled] = useState(false);
@@ -29,12 +37,17 @@ export default function Subscription({ user, userProfile }) {
   useEffect(() => {
     async function load() {
       try {
-        const [prods, sub] = await Promise.all([
+        const [prods, sub, key] = await Promise.all([
           SubscriptionService.getProducts(),
           SubscriptionService.getSubscription(),
+          SubscriptionService.getPublishableKey(),
         ]);
         setProducts(prods);
         setSubscription(sub);
+        setPublishableKey(key || "");
+        if (key) {
+          setStripePromise(loadStripe(key));
+        }
       } catch (err) {
         console.error("Failed to load subscription data:", err);
       } finally {
@@ -45,16 +58,67 @@ export default function Subscription({ user, userProfile }) {
   }, []);
 
   const handleCheckout = async (priceId) => {
+    setCheckoutInfo("");
+    setPaymentError("");
+    setSelectedPriceId(priceId);
+    setClientSecret("");
     setCheckoutLoading(priceId);
     try {
-      const url = await SubscriptionService.createCheckout(priceId);
-      window.location.href = url;
+      let key = publishableKey;
+      if (!key) {
+        try {
+          key = await SubscriptionService.getPublishableKey();
+          setPublishableKey(key || "");
+          if (key) {
+            setStripePromise(loadStripe(key));
+          }
+        } catch (error) {
+          console.warn("Publishable key unavailable, using redirect checkout fallback", error);
+        }
+      }
+
+      if (!key) {
+        setCheckoutInfo("Rivalis secure checkout is opening now.");
+        const url = await SubscriptionService.createCheckout(priceId);
+        window.location.href = url;
+        return;
+      }
+
+      const checkoutSession = await SubscriptionService.createCustomCheckout(priceId);
+      if (!checkoutSession?.clientSecret) {
+        throw new Error("Custom checkout client secret missing");
+      }
+      setClientSecret(checkoutSession.clientSecret);
     } catch (err) {
       console.error("Checkout error:", err);
-      alert("Failed to start checkout. Please try again.");
+      setPaymentError("Failed to start checkout. Please try again.");
     } finally {
       setCheckoutLoading(null);
     }
+  };
+
+  const handlePaymentSuccess = async () => {
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 5000);
+    setShowCanceled(false);
+    setClientSecret("");
+    setSelectedPriceId(null);
+    setPaymentError("");
+    setCheckoutInfo("");
+
+    try {
+      const sub = await SubscriptionService.getSubscription();
+      setSubscription(sub);
+    } catch (error) {
+      console.error("Failed to refresh subscription after payment:", error);
+    }
+  };
+
+  const handlePaymentCancel = () => {
+    setClientSecret("");
+    setSelectedPriceId(null);
+    setPaymentError("");
+    setCheckoutInfo("");
   };
 
   const handleManage = async () => {
@@ -79,6 +143,8 @@ export default function Subscription({ user, userProfile }) {
   const annualPrice = rivalisProduct?.prices?.find(
     (p) => p.recurring?.interval === "year"
   );
+
+  const getPriceAmount = (price) => price?.unit_amount ?? price?.unitAmount ?? 0;
 
   const features = [
     { icon: "🚫", title: "Ad-Free Experience", desc: "No banners, no interruptions" },
@@ -303,6 +369,64 @@ export default function Subscription({ user, userProfile }) {
       cursor: "pointer",
       transition: "all 0.2s",
     },
+    paymentPanel: {
+      marginTop: 14,
+      background: "rgba(0,0,0,0.35)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 14,
+      padding: 14,
+      maxWidth: 420,
+      marginLeft: "auto",
+      marginRight: "auto",
+      textAlign: "left",
+    },
+    paymentActions: {
+      display: "flex",
+      gap: 8,
+      marginTop: 12,
+    },
+    payBtn: {
+      flex: 1,
+      padding: "12px 14px",
+      borderRadius: 12,
+      border: "none",
+      background: t.accent,
+      color: "#fff",
+      cursor: "pointer",
+      fontWeight: 700,
+      fontSize: 14,
+    },
+    cancelBtn: {
+      flex: 1,
+      padding: "12px 14px",
+      borderRadius: 12,
+      border: "1px solid rgba(255,255,255,0.2)",
+      background: "transparent",
+      color: "rgba(255,255,255,0.8)",
+      cursor: "pointer",
+      fontWeight: 600,
+      fontSize: 14,
+    },
+    paymentError: {
+      color: "#ff8f8f",
+      background: "rgba(255,0,0,0.08)",
+      border: "1px solid rgba(255,0,0,0.2)",
+      borderRadius: 10,
+      padding: "8px 10px",
+      marginTop: 10,
+      fontSize: 12,
+      textAlign: "left",
+    },
+    checkoutInfo: {
+      color: "rgba(255,255,255,0.75)",
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      borderRadius: 10,
+      padding: "8px 10px",
+      marginTop: 10,
+      fontSize: 12,
+      textAlign: "left",
+    },
     featuresGrid: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
@@ -411,7 +535,7 @@ export default function Subscription({ user, userProfile }) {
                     {billingPeriod === "month" && monthlyPrice && (
                       <>
                         <div style={styles.priceAmount}>
-                          ${(monthlyPrice.unit_amount / 100).toFixed(2)}
+                          ${(getPriceAmount(monthlyPrice) / 100).toFixed(2)}
                           <span style={styles.priceInterval}>/month</span>
                         </div>
                         <button
@@ -423,19 +547,39 @@ export default function Subscription({ user, userProfile }) {
                           }}
                         >
                           {checkoutLoading === monthlyPrice.id
-                            ? "Redirecting..."
+                            ? "Preparing Checkout..."
                             : "Subscribe Now"}
                         </button>
+                        {selectedPriceId === monthlyPrice.id && clientSecret && stripePromise && (
+                          <div style={styles.paymentPanel}>
+                            <Elements
+                              stripe={stripePromise}
+                              options={{
+                                clientSecret,
+                                appearance: {
+                                  theme: "night",
+                                },
+                              }}
+                            >
+                              <CustomCheckoutForm
+                                styles={styles}
+                                onSuccess={handlePaymentSuccess}
+                                onCancel={handlePaymentCancel}
+                                onError={setPaymentError}
+                              />
+                            </Elements>
+                          </div>
+                        )}
                       </>
                     )}
                     {billingPeriod === "year" && annualPrice && (
                       <>
                         <div style={styles.priceAmount}>
-                          ${(annualPrice.unit_amount / 100).toFixed(2)}
+                          ${(getPriceAmount(annualPrice) / 100).toFixed(2)}
                           <span style={styles.priceInterval}>/year</span>
                         </div>
                         <div style={styles.savingsNote}>
-                          That's just ${(annualPrice.unit_amount / 100 / 12).toFixed(2)}/month
+                          That's just ${(getPriceAmount(annualPrice) / 100 / 12).toFixed(2)}/month
                         </div>
                         <button
                           onClick={() => handleCheckout(annualPrice.id)}
@@ -446,11 +590,33 @@ export default function Subscription({ user, userProfile }) {
                           }}
                         >
                           {checkoutLoading === annualPrice.id
-                            ? "Redirecting..."
+                            ? "Preparing Checkout..."
                             : "Subscribe Now"}
                         </button>
+                        {selectedPriceId === annualPrice.id && clientSecret && stripePromise && (
+                          <div style={styles.paymentPanel}>
+                            <Elements
+                              stripe={stripePromise}
+                              options={{
+                                clientSecret,
+                                appearance: {
+                                  theme: "night",
+                                },
+                              }}
+                            >
+                              <CustomCheckoutForm
+                                styles={styles}
+                                onSuccess={handlePaymentSuccess}
+                                onCancel={handlePaymentCancel}
+                                onError={setPaymentError}
+                              />
+                            </Elements>
+                          </div>
+                        )}
                       </>
                     )}
+                    {checkoutInfo && <div style={styles.checkoutInfo}>{checkoutInfo}</div>}
+                    {paymentError && <div style={styles.paymentError}>{paymentError}</div>}
                   </div>
                 </div>
               </div>
@@ -471,5 +637,57 @@ export default function Subscription({ user, userProfile }) {
         )}
       </div>
     </div>
+  );
+}
+
+function CustomCheckoutForm({ styles, onSuccess, onCancel, onError }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!stripe || !elements || submitting) return;
+
+    setSubmitting(true);
+    onError("");
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/subscription?success=true`,
+      },
+      redirect: "if_required",
+    });
+
+    if (error) {
+      onError(error.message || "Payment failed. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+
+    const okStatuses = ["succeeded", "processing", "requires_capture"];
+    if (paymentIntent?.status && okStatuses.includes(paymentIntent.status)) {
+      await onSuccess();
+      setSubmitting(false);
+      return;
+    }
+
+    onError("Payment is not complete yet. Please try again.");
+    setSubmitting(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <PaymentElement />
+      <div style={styles.paymentActions}>
+        <button type="submit" disabled={!stripe || submitting} style={styles.payBtn}>
+          {submitting ? "Processing..." : "Complete Subscription"}
+        </button>
+        <button type="button" onClick={onCancel} disabled={submitting} style={styles.cancelBtn}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }

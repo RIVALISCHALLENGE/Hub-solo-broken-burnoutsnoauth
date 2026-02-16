@@ -12,10 +12,25 @@ export default function BackgroundShell({ children }) {
     if (typeof window === "undefined") return true;
     return window.matchMedia("(max-width: 768px)").matches;
   });
+  const [isTiny, setIsTiny] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(max-width: 380px)").matches;
+  });
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
     const onChange = (e) => setIsMobile(e.matches);
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 380px)");
+    const onChange = (e) => setIsTiny(e.matches);
     if (mq.addEventListener) mq.addEventListener("change", onChange);
     else mq.addListener(onChange);
     return () => {
@@ -50,13 +65,13 @@ export default function BackgroundShell({ children }) {
   useEffect(() => {
     if (!bgRef.current) return;
     if (isMobile) {
-      bgRef.current.style.transform = "scale(1) translate3d(0px, 0px, 0)";
+      bgRef.current.style.transform = `scale(${isTiny ? "0.8" : "0.86"}) translate3d(0px, 0px, 0)`;
       return;
     }
     bgRef.current.style.transform = `scale(1.03) translate3d(${parallax.x}px, ${parallax.y}px, 0)`;
-  }, [parallax, isMobile]);
+  }, [parallax, isMobile, isTiny]);
 
-  const backgroundSize = isMobile ? "cover" : "contain";
+  const backgroundSize = isMobile ? (isTiny ? "88% auto" : "92% auto") : "contain";
   const backgroundPosition = isMobile ? "center top" : "center center";
 
   const abs = { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 };

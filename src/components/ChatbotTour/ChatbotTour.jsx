@@ -42,6 +42,52 @@ const MOTIVATIONAL_QUOTES = [
 const MOOD_OPTIONS = ['Great', 'Good', 'Okay', 'Low', 'Struggling'];
 const PHYSICAL_OPTIONS = ['Strong', 'Energized', 'Normal', 'Tired', 'Sore', 'Injured'];
 
+function buildOfflineCoachReply(input, userProfile, isPro) {
+  const normalized = (input || '').toLowerCase();
+  const goal = userProfile?.goals || userProfile?.fitnessGoals?.[0] || 'General Health';
+  const level = userProfile?.fitnessLevel || 'Intermediate';
+
+  if (!isPro) {
+    if (normalized.includes('meal') || normalized.includes('nutrition') || normalized.includes('diet')) {
+      return `OFFLINE COACH MODE ACTIVE.\n\nPREMIUM PREVIEW — Nutrition Protocol:\n- Meal timing around workouts\n- Macro targets by goal\n- Portion-level daily plan\n\nUnlock Rivalis Pro to activate your full personalized protocol.`;
+    }
+
+    if (normalized.includes('workout') || normalized.includes('plan') || normalized.includes('routine')) {
+      return `OFFLINE COACH MODE ACTIVE.\n\nPREMIUM PREVIEW — Training Protocol:\n- Goal-based split\n- Progressive overload structure\n- Recovery and deload logic\n\nUnlock Rivalis Pro to activate your full personalized protocol.`;
+    }
+
+    return `OFFLINE COACH MODE ACTIVE.\n\nPREMIUM PREVIEW:\nYou can access tactical guidance here, and Pro unlocks full personalized plans, meal protocols, and advanced tracking.\n\nUnlock Rivalis Pro to activate your full personalized protocol.`;
+  }
+
+  if (normalized.includes('meal') || normalized.includes('nutrition') || normalized.includes('diet')) {
+    return `OFFLINE COACH MODE ACTIVE.\n\nFueling Protocol (${goal}):\n- Protein each meal: palm-sized serving\n- Carbs around training: fruit, rice, oats, potatoes\n- Hydration target: 2-3L water daily\n- Build 3 meals + 1 high-protein snack\n\nWhen connection returns, I can generate your full macro-based plan.`;
+  }
+
+  if (normalized.includes('workout') || normalized.includes('plan') || normalized.includes('routine')) {
+    return `OFFLINE COACH MODE ACTIVE.\n\nRapid Training Protocol (${level}):\n- Push-ups: 4 x 10-15\n- Squats: 4 x 15-20\n- Plank: 4 x 30-45 sec\n- Mountain Climbers: 4 x 20\n\nProgression: add 1-2 reps each round next session.`;
+  }
+
+  if (normalized.includes('motivat') || normalized.includes('tired') || normalized.includes('stuck')) {
+    return `OFFLINE COACH MODE ACTIVE.\n\nMission Reminder: consistency beats intensity spikes.\n- Do a 12-minute session right now\n- Track completion, not perfection\n- Stack one win today, then scale tomorrow`;
+  }
+
+  return `OFFLINE COACH MODE ACTIVE.\n\nNetwork is unavailable, but I can still guide your basics:\n- Ask for: workout, nutrition, motivation, or recovery\n- I will return fast tactical protocols until connection is restored.`;
+}
+
+function extractRivalisPlanJson(messageText) {
+  if (!messageText) return null;
+  const blockMatch = messageText.match(/```RIVALIS_PLAN_JSON\s*([\s\S]*?)```/i);
+  if (!blockMatch || !blockMatch[1]) return null;
+
+  try {
+    const parsed = JSON.parse(blockMatch[1].trim());
+    if (!parsed || !Array.isArray(parsed.days)) return null;
+    return parsed;
+  } catch (error) {
+    return null;
+  }
+}
+
 const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
   const t = useTheme();
   const [messages, setMessages] = useState([]);
@@ -53,6 +99,14 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
   const [checkInPhase, setCheckInPhase] = useState(null);
   const [checkInData, setCheckInData] = useState({});
   const [trendData, setTrendData] = useState(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.matchMedia('(max-width: 768px)').matches;
+  });
+  const [isTinyViewport, setIsTinyViewport] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.matchMedia('(max-width: 380px)').matches;
+  });
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -158,6 +212,30 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)');
+    const onChange = (event) => setIsMobileViewport(event.matches);
+    if (media.addEventListener) media.addEventListener('change', onChange);
+    else media.addListener(onChange);
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', onChange);
+      else media.removeListener(onChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 380px)');
+    const onChange = (event) => setIsTinyViewport(event.matches);
+    if (media.addEventListener) media.addEventListener('change', onChange);
+    else media.addListener(onChange);
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', onChange);
+      else media.removeListener(onChange);
+    };
+  }, []);
+
   const [profileData, setProfileData] = useState({
     gender: '',
     age: '',
@@ -173,6 +251,15 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
 
   const isInIntake = showTour && tourStep >= INTAKE_START_STEP && tourStep < INTAKE_START_STEP + TOUR_QUESTIONS.length;
   const intakeIndex = tourStep - INTAKE_START_STEP;
+
+  const getAuthHeaders = useCallback(async () => {
+    if (!user) return { 'Content-Type': 'application/json' };
+    const token = await user.getIdToken();
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+  }, [user]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -238,8 +325,10 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
           bmi: bmi ? parseFloat(bmi) : null,
           fitnessLevel: newProfile.fitnessLevel,
           goals: newProfile.goals,
+          fitnessGoals: newProfile.goals ? [newProfile.goals] : [],
           workoutFrequency: newProfile.workoutFrequency,
           reason: newProfile.reason,
+          appSeeking: newProfile.reason ? [newProfile.reason] : [],
           injuries: newProfile.injuries
         };
 
@@ -296,23 +385,32 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       return;
     }
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      addBotMessage(buildOfflineCoachReply(currentInput, userProfile, isPro), 250);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       let convId = window.localStorage.getItem('rivalis_conv_id');
+      const authHeaders = await getAuthHeaders();
       
-      const userContext = isPro ? [
+      const userContext = [
         userProfile?.goals && `Goal: ${userProfile.goals}`,
+        userProfile?.reason && `Reason: ${userProfile.reason}`,
+        userProfile?.fitnessLevel && `Fitness level: ${userProfile.fitnessLevel}`,
+        userProfile?.workoutFrequency && `Workout frequency: ${userProfile.workoutFrequency}`,
         userProfile?.weight && `Weight: ${userProfile.weight}`,
         userProfile?.height && `Height: ${userProfile.height}`,
         userProfile?.age && `Age: ${userProfile.age}`,
-      ].filter(Boolean).join(', ') : '';
+      ].filter(Boolean).join(', ');
 
       const sendRequest = async (cid) => {
         return await fetch(`/api/conversations/${cid}/messages`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: currentInput, isPro, userContext })
+          headers: authHeaders,
+          body: JSON.stringify({ content: currentInput, userContext })
         });
       };
 
@@ -320,7 +418,7 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       if (!convId) {
         const convRes = await fetch('/api/conversations', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({ title: `Chat with ${userProfile?.nickname || 'Rival'}` })
         });
         
@@ -339,7 +437,7 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
           window.localStorage.removeItem('rivalis_conv_id');
           const convRes = await fetch('/api/conversations', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders,
             body: JSON.stringify({ title: `Chat with ${userProfile?.nickname || 'Rival'}` })
           });
           
@@ -404,6 +502,20 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
         }
       }
 
+      const integratedPlan = extractRivalisPlanJson(fullText);
+      if (integratedPlan && user) {
+        try {
+          const { UserService } = await import('../../services/userService.js');
+          await UserService.updateUserProfile(user.uid, {
+            integratedWorkoutPlan: integratedPlan,
+            integratedWorkoutPlanSource: 'chatbot_coach',
+            integratedWorkoutPlanUpdatedAt: new Date().toISOString(),
+          });
+        } catch (planSaveError) {
+          console.error("Failed to save integrated Rivalis plan:", planSaveError);
+        }
+      }
+
     } catch (error) {
       console.error("AI Error:", error);
       setIsLoading(false);
@@ -422,7 +534,7 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
         console.error("Failed to notify admin of error:", notifyErr);
       }
 
-      addBotMessage("Connection interrupted. Our support team has been notified. Please try again in a moment, or describe your issue and we'll get back to you.");
+      addBotMessage(buildOfflineCoachReply(currentInput, userProfile, isPro), 200);
     }
   };
 
@@ -484,7 +596,20 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
     const convId = window.localStorage.getItem('rivalis_conv_id');
     if (convId) {
       try {
-        window.open(`/api/conversations/${convId}/export`, '_blank');
+        const headers = await getAuthHeaders();
+        const response = await fetch(`/api/conversations/${convId}/export`, { headers });
+        if (!response.ok) {
+          throw new Error('Export request failed');
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Rivalis_Plan_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       } catch (error) {
         console.error("Export failed:", error);
         const text = messages.map(m => `${m.isBot ? 'COACH' : 'RIVAL'}: ${m.text}`).join('\n\n');
@@ -513,13 +638,13 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       transition: 'all 0.3s ease',
     },
     header: {
-      padding: '10px 15px',
+      padding: isTinyViewport ? '7px 8px' : (isMobileViewport ? '8px 10px' : '10px 15px'),
       background: 'linear-gradient(180deg, #111 0%, #0a0a0a 100%)',
       borderBottom: `1px solid ${t.shadowXs}`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: '10px',
+      gap: isTinyViewport ? '6px' : '10px',
     },
     statusDot: {
       width: '8px',
@@ -531,7 +656,7 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
     },
     headerTitle: {
       color: t.accent,
-      fontSize: '11px',
+      fontSize: isTinyViewport ? '8px' : (isMobileViewport ? '9px' : '11px'),
       fontWeight: 'bold',
       letterSpacing: '1px',
       textShadow: `0 0 6px ${t.shadowSm}`,
@@ -551,16 +676,16 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       background: 'transparent',
       border: `1px solid ${t.shadowSm}`,
       color: t.shadowMd,
-      padding: '4px 10px',
+      padding: isTinyViewport ? '2px 6px' : (isMobileViewport ? '3px 8px' : '4px 10px'),
       borderRadius: '6px',
-      fontSize: '9px',
+      fontSize: isTinyViewport ? '7px' : (isMobileViewport ? '8px' : '9px'),
       cursor: 'pointer',
       fontFamily: "'Press Start 2P', cursive",
       transition: 'all 0.2s ease',
     },
     chatArea: {
       flex: 1,
-      padding: '12px 10px',
+      padding: isTinyViewport ? '6px 6px' : (isMobileViewport ? '8px 8px' : '12px 10px'),
       overflowY: 'auto',
       display: 'flex',
       flexDirection: 'column',
@@ -568,7 +693,7 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       WebkitOverflowScrolling: 'touch',
     },
     inputArea: {
-      padding: '10px',
+      padding: isTinyViewport ? '6px' : (isMobileViewport ? '8px' : '10px'),
       background: 'linear-gradient(180deg, #0a0a0a 0%, #111 100%)',
       borderTop: `1px solid ${t.shadowXs}`,
       display: 'flex',
@@ -579,20 +704,20 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       background: '#000',
       border: '1px solid rgba(51,51,51,0.6)',
       borderRadius: '10px',
-      padding: '12px 15px',
+      padding: isTinyViewport ? '9px 10px' : (isMobileViewport ? '10px 12px' : '12px 15px'),
       color: '#FFF',
       outline: 'none',
-      fontSize: '16px',
+      fontSize: isTinyViewport ? '15px' : '16px',
       transition: 'border-color 0.2s ease',
     },
     sendButton: {
       background: t.accent,
       border: 'none',
       borderRadius: '10px',
-      width: '44px',
+      width: isTinyViewport ? '36px' : (isMobileViewport ? '40px' : '44px'),
       color: '#FFF',
       cursor: 'pointer',
-      fontSize: '18px',
+      fontSize: isTinyViewport ? '15px' : (isMobileViewport ? '16px' : '18px'),
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -611,11 +736,11 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 10,
-      padding: '20px',
+      padding: isTinyViewport ? '8px' : (isMobileViewport ? '10px' : '20px'),
     },
     resumeTab: {
       background: t.accent,
-      padding: '10px 20px',
+      padding: isTinyViewport ? '7px 10px' : (isMobileViewport ? '8px 14px' : '10px 20px'),
       borderRadius: '20px 20px 0 0',
       cursor: 'pointer',
       display: 'flex',
@@ -625,12 +750,12 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       pointerEvents: 'auto',
       position: 'absolute',
       bottom: 0,
-      right: '20px',
+      right: isTinyViewport ? '8px' : (isMobileViewport ? '12px' : '20px'),
       animation: 'slideUp 0.3s ease-out',
     },
     resumeText: {
       color: '#FFF',
-      fontSize: '9px',
+      fontSize: isTinyViewport ? '7px' : (isMobileViewport ? '8px' : '9px'),
       fontFamily: "'Press Start 2P', cursive",
       letterSpacing: '0.5px',
     },
@@ -644,7 +769,7 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
     proActions: {
       display: 'flex',
       gap: '6px',
-      padding: '6px 10px',
+      padding: isTinyViewport ? '5px 6px' : '6px 10px',
       background: '#0a0a0a',
       borderTop: `1px solid ${t.shadowXs}`,
       overflowX: 'auto',
@@ -653,9 +778,9 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       background: t.shadowXxs,
       border: `1px solid ${t.shadowSm}`,
       color: '#fff',
-      padding: '6px 10px',
+      padding: isTinyViewport ? '5px 8px' : '6px 10px',
       borderRadius: '8px',
-      fontSize: '11px',
+      fontSize: isTinyViewport ? '10px' : '11px',
       cursor: 'pointer',
       whiteSpace: 'nowrap',
       flexShrink: 0,
@@ -666,13 +791,13 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: '8px',
-      padding: '6px 10px',
+      padding: isTinyViewport ? '5px 6px' : '6px 10px',
       background: t.shadowXxs,
       borderTop: `1px solid ${t.shadowXs}`,
     },
     upgradeLink: {
       color: t.accent,
-      fontSize: '10px',
+      fontSize: isTinyViewport ? '9px' : '10px',
       fontWeight: 'bold',
       fontFamily: "'Press Start 2P', cursive",
       textDecoration: 'none',

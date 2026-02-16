@@ -22,7 +22,7 @@ export default function Burnouts({ user, userProfile }) {
 
     setLoading(true);
     try {
-      await LeaderboardService.submitScore({
+      const result = await LeaderboardService.submitScore({
         userId: user.uid,
         userName: userProfile?.nickname || user.email,
         gameMode: "burnouts",
@@ -33,6 +33,11 @@ export default function Burnouts({ user, userProfile }) {
           type: stats.type || 'rep'
         }
       });
+
+      if (!result?.success) {
+        throw new Error(result?.error || "Failed to save burnout session");
+      }
+
       alert(`Burnout Complete! ${stats.reps} reps submitted.`);
       navigate("/dashboard");
     } catch (error) {

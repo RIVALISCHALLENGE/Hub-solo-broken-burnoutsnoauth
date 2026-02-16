@@ -6,6 +6,7 @@ import {
   orderBy, 
   limit, 
   getDocs,
+  getDoc,
   where,
   Timestamp,
   doc,
@@ -76,21 +77,32 @@ export const LeaderboardService = {
       const docRef = await addDoc(collection(db, "leaderboard"), scoreEntry);
       
       // Update user's profile with ticket balance and total reps/stats
-      const userRef = doc(db, "users", userId);
-      const userSnap = await getDocs(query(collection(db, "users"), where("userId", "==", userId)));
-      
-      if (!userSnap.empty) {
-        const userDoc = userSnap.docs[0];
-        const userData = userDoc.data();
-        
+      const directUserRef = doc(db, "users", userId);
+      const directUserSnap = await getDoc(directUserRef);
+
+      let profileRef = null;
+      let profileData = null;
+
+      if (directUserSnap.exists()) {
+        profileRef = directUserRef;
+        profileData = directUserSnap.data();
+      } else {
+        const fallbackSnap = await getDocs(query(collection(db, "users"), where("userId", "==", userId), limit(1)));
+        if (!fallbackSnap.empty) {
+          profileRef = fallbackSnap.docs[0].ref;
+          profileData = fallbackSnap.docs[0].data();
+        }
+      }
+
+      if (profileRef && profileData) {
         // Reset weekly tickets if window changed
-        const lastUpdate = userData.lastTicketWindowUpdate?.toDate() || new Date(0);
-        let currentWeeklyRefs = userData.activeTicketRefs || [];
+        const lastUpdate = profileData.lastTicketWindowUpdate?.toDate() || new Date(0);
+        let currentWeeklyRefs = profileData.activeTicketRefs || [];
         if (lastUpdate < windowStart) {
           currentWeeklyRefs = [];
         }
 
-        await updateDoc(userDoc.ref, {
+        await updateDoc(profileRef, {
           ticketBalance: increment(ticketCount),
           totalReps: increment(metadata.type !== 'timed' ? score : 0),
           activeTicketRefs: [...currentWeeklyRefs, ...ticketRefs],
