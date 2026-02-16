@@ -89,7 +89,6 @@ function extractRivalisPlanJson(messageText) {
     return null;
   }
 }
-
 function cleanTextForSpeech(text) {
   return String(text || '')
     .replace(/```[\s\S]*?```/g, '')
@@ -114,7 +113,6 @@ function personalizeCoachMessage(text, userName) {
 
   return `${safeName}, ${safeText}`;
 }
-
 const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
   const t = useTheme();
   const [messages, setMessages] = useState([]);
@@ -481,7 +479,7 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       let convId = window.localStorage.getItem('rivalis_conv_id');
       const authHeaders = await getAuthHeaders();
       
-      const userContext = [
+            const userContext = [
         `Preferred name: ${userName}`,
         `Address the user as ${userName} in every response`,
         userProfile?.goals && `Goal: ${userProfile.goals}`,

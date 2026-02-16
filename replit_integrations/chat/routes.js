@@ -92,7 +92,6 @@ function registerChatRoutes(app) {
     const parsed = match[1].trim();
     return parsed || null;
   }
-
   function buildFreeTierTeaser(userMessage = "") {
     const text = (userMessage || "").toLowerCase();
 

@@ -492,7 +492,6 @@ app.post('/api/live-engine/share-bonus', async (req, res) => {
     });
   }
 });
-
 app.get('/api/stripe/publishable-key', async (req, res) => {
   try {
     const key = await getStripePublishableKey();
