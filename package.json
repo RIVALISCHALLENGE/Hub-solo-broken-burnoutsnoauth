@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "smoke:live": "bash scripts/smoke_live_hub.sh"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^3.9.0",
