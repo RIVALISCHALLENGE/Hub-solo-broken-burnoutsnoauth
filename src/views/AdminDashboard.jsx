@@ -200,7 +200,7 @@ function AdminDashboard() {
           <h2 className="text-xl font-semibold mb-2">Users</h2>
           <table className="w-full text-left mb-4">
             <thead>
-              <tr><th>ID</th><th>Nickname</th><th>Email</th><th>Role</th><th>Impersonate</th></tr>
+              <tr><th>ID</th><th>Nickname</th><th>Email</th><th>Role</th><th>Impersonate</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {users.map(u => (
@@ -210,6 +210,42 @@ function AdminDashboard() {
                   <td>{u.email}</td>
                   <td>{u.role}</td>
                   <td><button className="text-blue-400 underline" onClick={() => setImpersonateUser(u)}>Impersonate</button></td>
+                  <td className="space-x-2">
+                    <button className="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold" onClick={async () => {
+                      if (window.confirm(`Ban user ${u.nickname || u.userId || u.id}?`)) {
+                        await fetch("/api/admin/user-action", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_SECRET}` },
+                          body: JSON.stringify({ action: "ban", userId: u.userId || u.id })
+                        });
+                        alert("User banned.");
+                      }
+                    }}>Ban</button>
+                    <button className="bg-yellow-600 text-white px-2 py-1 rounded text-xs font-bold" onClick={async () => {
+                      await fetch("/api/admin/user-action", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_SECRET}` },
+                        body: JSON.stringify({ action: "promote", userId: u.userId || u.id })
+                      });
+                      alert("User promoted to admin.");
+                    }}>Promote</button>
+                    <button className="bg-gray-600 text-white px-2 py-1 rounded text-xs font-bold" onClick={async () => {
+                      await fetch("/api/admin/user-action", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_SECRET}` },
+                        body: JSON.stringify({ action: "demote", userId: u.userId || u.id })
+                      });
+                      alert("User demoted from admin.");
+                    }}>Demote</button>
+                    <button className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold" onClick={async () => {
+                      await fetch("/api/admin/user-action", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_SECRET}` },
+                        body: JSON.stringify({ action: "kick", userId: u.userId || u.id })
+                      });
+                      alert("User kicked (forced logout).");
+                    }}>Kick</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
