@@ -4,12 +4,27 @@ import { LeaderboardService } from "../services/leaderboardService";
 import { useNavigate } from "react-router-dom";
 import BurnoutsSelection from "../components/Burnouts/BurnoutsSelection";
 import BurnoutsSession from "../components/Burnouts/BurnoutsSession";
+import { DEFAULT_VOICE_MODEL, VOICE_MODEL_OPTIONS } from "../logic/voiceCoach.js";
 import "../styles/Burnouts.css";
+
+const COACH_VOICE_STORAGE_KEY = "rivalis_coach_voice_model";
 
 export default function Burnouts({ user, userProfile }) {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [voiceModel, setVoiceModel] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_VOICE_MODEL;
+    return window.localStorage.getItem(COACH_VOICE_STORAGE_KEY) || DEFAULT_VOICE_MODEL;
+  });
   const navigate = useNavigate();
+
+  const handleVoiceModelChange = (event) => {
+    const selected = event.target.value;
+    setVoiceModel(selected);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(COACH_VOICE_STORAGE_KEY, selected);
+    }
+  };
 
   const handleSelectGroup = (group) => {
     setLoading(true);
@@ -51,6 +66,43 @@ export default function Burnouts({ user, userProfile }) {
   return (
     <div style={{ width: "100%", height: "calc(100vh - 64px)", position: "relative", overflow: "hidden", backgroundColor: "#000" }}>
       {loading && <LoadingScreen />}
+
+      <div style={{
+        position: "absolute",
+        top: 14,
+        right: 14,
+        zIndex: 20,
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        background: "rgba(0,0,0,0.6)",
+        border: "1px solid rgba(255,255,255,0.2)",
+        borderRadius: 10,
+        padding: "8px 10px",
+      }}>
+        <label htmlFor="burnouts-coach-voice" style={{ color: "#fff", fontSize: 11, letterSpacing: 0.5 }}>
+          AI Coach Voice
+        </label>
+        <select
+          id="burnouts-coach-voice"
+          value={voiceModel}
+          onChange={handleVoiceModelChange}
+          style={{
+            background: "#0f0f10",
+            color: "#fff",
+            border: "1px solid rgba(255,255,255,0.22)",
+            borderRadius: 8,
+            padding: "6px 8px",
+            fontSize: 12,
+          }}
+        >
+          {VOICE_MODEL_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
       
       {!selectedGroup ? (
         <BurnoutsSelection onSelect={handleSelectGroup} />
@@ -59,6 +111,7 @@ export default function Burnouts({ user, userProfile }) {
           userId={user.uid} 
           muscleGroup={selectedGroup} 
           onSessionEnd={handleSessionEnd}
+          voiceModel={voiceModel}
         />
       )}
     </div>

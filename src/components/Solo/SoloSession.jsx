@@ -2,13 +2,15 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { shuffleSoloDeck, updateUserStats, finalizeSession } from '../../logic/burnoutsHelpers';
 import { processExercise, createStateRefs, resetStateRefs } from '../../logic/exerciseEngine';
 import PoseVisualizer from '../Burnouts/PoseVisualizer';
+import {
+    announceRepProgress,
+    maybeSpeakMotivation,
+    primeVoiceCoach,
+    speakCoach,
+    DEFAULT_VOICE_MODEL,
+} from '../../logic/voiceCoach.js';
 
-function speak(text) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    window.speechSynthesis.speak(utterance);
-}
-
-export default function SoloSession({ userId, onSessionEnd }) {
+export default function SoloSession({ userId, onSessionEnd, voiceModel = DEFAULT_VOICE_MODEL }) {
     const [deck] = useState(() => shuffleSoloDeck());
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [totalReps, setTotalReps] = useState(0);
@@ -25,6 +27,10 @@ export default function SoloSession({ userId, onSessionEnd }) {
     const currentCard = deck[currentCardIndex];
 
     useEffect(() => {
+        primeVoiceCoach();
+    }, []);
+
+    useEffect(() => {
         let interval;
         if (sessionActive) {
             interval = setInterval(() => {
@@ -39,11 +45,16 @@ export default function SoloSession({ userId, onSessionEnd }) {
     useEffect(() => {
         if (deck.length > 0 && sessionActive && cooldown === 0) {
             if (lastAnnouncedCardIndex.current !== currentCardIndex) {
-                speak(`${deck[currentCardIndex].exercise}, ${deck[currentCardIndex].reps} reps.`);
+                if (!isMuted) {
+                    speakCoach(`${deck[currentCardIndex].exercise}. ${deck[currentCardIndex].reps} reps.`, {
+                        voiceModel,
+                        interrupt: true,
+                    });
+                }
                 lastAnnouncedCardIndex.current = currentCardIndex;
             }
         }
-    }, [currentCardIndex, cooldown, sessionActive, deck]);
+    }, [currentCardIndex, cooldown, sessionActive, deck, isMuted, voiceModel]);
 
     useEffect(() => {
         let timer;
@@ -56,14 +67,14 @@ export default function SoloSession({ userId, onSessionEnd }) {
                     }
                     const next = prev - 1;
                     if (next <= 5 && !isMuted) {
-                        speak(next.toString());
+                        speakCoach(next.toString(), { voiceModel });
                     }
                     return next;
                 });
             }, 1000);
         }
         return () => clearInterval(timer);
-    }, [cooldown]);
+    }, [cooldown, isMuted, voiceModel]);
 
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -82,7 +93,12 @@ export default function SoloSession({ userId, onSessionEnd }) {
 
     const completeCard = useCallback(() => {
         setFeedback("CARD COMPLETE! 💪");
-        if (!isMuted) speak("Card complete. 15 second rest.");
+        if (!isMuted) {
+            speakCoach("Card complete. 15 second rest.", {
+                voiceModel,
+                interrupt: true,
+            });
+        }
         setTimeout(() => {
             setCurrentCardIndex(prevIndex => {
                 const nextIndex = prevIndex + 1;
@@ -103,11 +119,13 @@ export default function SoloSession({ userId, onSessionEnd }) {
                 }
             });
         }, 1500);
-    }, [deck, isMuted, userId, totalReps, ticketsEarned, onSessionEnd, timeElapsed]);
+    }, [deck, isMuted, userId, totalReps, ticketsEarned, onSessionEnd, timeElapsed, voiceModel]);
 
     const handleRep = useCallback((inc) => {
+        const previousWholeReps = Math.floor(currentReps);
         const next = currentReps + inc;
         const target = currentCard.reps;
+        const clampedNext = Math.min(next, target);
         if (next >= target) {
             setCurrentReps(target);
             completeCard();
@@ -123,10 +141,16 @@ export default function SoloSession({ userId, onSessionEnd }) {
             updateUserStats(userId, newTotalReps, newTickets, "Solo");
         }
 
-        if (Math.floor(next) > Math.floor(currentReps) && !isMuted) {
-            speak(Math.floor(next).toString());
+        if (!isMuted) {
+            announceRepProgress(previousWholeReps, clampedNext, { voiceModel });
+            maybeSpeakMotivation(newTotalReps, {
+                voiceModel,
+                channel: 'solo',
+                exerciseName: currentCard?.exercise,
+                repsRemaining: Math.max(0, target - Math.floor(clampedNext)),
+            });
         }
-    }, [currentReps, currentCard, totalReps, ticketsEarned, isMuted, userId, completeCard]);
+    }, [currentReps, currentCard, totalReps, ticketsEarned, isMuted, userId, completeCard, voiceModel]);
 
     const processPose = useCallback((landmarks) => {
         if (!currentCard || !sessionActive || cooldown > 0 || !landmarks) return;

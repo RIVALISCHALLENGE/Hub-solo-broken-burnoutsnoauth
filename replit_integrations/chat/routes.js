@@ -82,6 +82,17 @@ async function resolveSubscriptionAccess(req) {
 }
 
 function registerChatRoutes(app) {
+  function extractPreferredName(userContext = "") {
+    const text = String(userContext || "");
+    if (!text) return null;
+
+    const match = text.match(/preferred\s+name\s*:\s*([^,\n]+)/i);
+    if (!match || !match[1]) return null;
+
+    const parsed = match[1].trim();
+    return parsed || null;
+  }
+
   function buildFreeTierTeaser(userMessage = "") {
     const text = (userMessage || "").toLowerCase();
 
@@ -179,6 +190,7 @@ function registerChatRoutes(app) {
       const conversationId = req.params.id;
       const { content, userContext } = req.body;
       const { isPro } = await resolveSubscriptionAccess(req);
+      const preferredName = extractPreferredName(userContext) || "Rival";
 
       if (!isPro) {
         const today = new Date().toISOString().split('T')[0];
@@ -274,7 +286,8 @@ RIVALIS INTEGRATION CONTRACT (MANDATORY for workout/program/plan requests):
 TONE:
 - Do not be generic. Be sharp, witty, and authoritative.
 - Keep responses concise but saturated with personality.
-- If the user is on a tour, guide them to the next sector of the hub.`;
+- If the user is on a tour, guide them to the next sector of the hub.
+- You MUST directly address the user by their preferred name in every response.`;
 
       const proEnhancement = isPro ? `
 
@@ -286,6 +299,7 @@ PRO MEMBER FEATURES (This user is a Rivalis Pro subscriber):
 - **ADVANCED ANALYTICS**: Offer detailed analysis of their training volume, intensity, and recovery needs.
 - **INJURY PREVENTION**: Provide prehab exercises, mobility work, and form cues for their specific needs.
 ${userContext ? `\nUSER CONTEXT: ${userContext}` : ''}
+- Preferred name: ${preferredName}
 - Address them as a valued Pro member. Provide the most detailed, personalized advice possible.` : `
 
 FREE TIER USER:
@@ -293,7 +307,9 @@ FREE TIER USER:
 - PREMIUM PREVIEW POLICY (STRICT): If the user asks for meal plans, full workout programs, long-term progression, or advanced tracking, provide ONLY a short preview (high-level bullet outline), not a full actionable plan.
 - Always end premium-preview responses with: "Unlock Rivalis Pro to activate your full personalized protocol."
 - Keep free-tier outputs concise and teaser-level for premium capabilities while still being helpful.
-- Do NOT gate basic fitness Q&A behind the subscription.`;
+- Do NOT gate basic fitness Q&A behind the subscription.
+- Preferred name: ${preferredName}
+- Address the user by preferred name in every response.`;
 
       const stream = await getOpenAIClient().chat.completions.create({
         model: isPro ? "gpt-5" : "gpt-5-nano",
@@ -309,6 +325,10 @@ FREE TIER USER:
       });
 
       let fullResponse = "";
+      const forcedPrefix = `${preferredName}, `;
+      fullResponse += forcedPrefix;
+      res.write(`data: ${JSON.stringify({ content: forcedPrefix })}\n\n`);
+
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || "";
         if (content) {

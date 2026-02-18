@@ -7,6 +7,9 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { updateProfile } from "firebase/auth";
 import WaitingForUpload from "./WaitingForUpload.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
+import { DEFAULT_VOICE_MODEL, VOICE_MODEL_OPTIONS, primeVoiceCoach, speakCoach } from "../logic/voiceCoach.js";
+
+const COACH_VOICE_STORAGE_KEY = "rivalis_coach_voice_model";
 
 const avatarStyles = [
   { id: "adventurer", name: "Adventurer" },
@@ -88,6 +91,10 @@ export default function Profile({ user, userProfile }) {
   const [activeChallenges, setActiveChallenges] = useState([]);
   const [lookingForBuddy, setLookingForBuddy] = useState(userProfile?.lookingForBuddy || false);
   const [potentialBuddies, setPotentialBuddies] = useState([]);
+  const [coachVoiceModel, setCoachVoiceModel] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_VOICE_MODEL;
+    return window.localStorage.getItem(COACH_VOICE_STORAGE_KEY) || DEFAULT_VOICE_MODEL;
+  });
 
   useEffect(() => {
     if (userProfile) {
@@ -310,6 +317,23 @@ export default function Profile({ user, userProfile }) {
     );
   };
 
+  const handleCoachVoiceModelChange = (event) => {
+    const selected = event.target.value;
+    setCoachVoiceModel(selected);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(COACH_VOICE_STORAGE_KEY, selected);
+    }
+  };
+
+  const previewCoachVoice = () => {
+    const userName = nickname?.trim() || userProfile?.nickname || user?.displayName || "Rival";
+    primeVoiceCoach();
+    speakCoach(`Ready when you are, ${userName}. Your AI coach voice is active.`, {
+      voiceModel: coachVoiceModel,
+      interrupt: true,
+    });
+  };
+
   const saveAvatar = async () => {
     if (!user) return;
     setIsSavingAvatar(true);
@@ -496,6 +520,54 @@ export default function Profile({ user, userProfile }) {
               Identity Details
             </h3>
             <div className="profile-bio-section">
+            <div style={{
+              marginBottom: "1rem",
+              padding: "10px",
+              background: t.hoverBg,
+              border: `1px solid ${t.shadowXs}`,
+              borderRadius: "8px"
+            }}>
+              <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive" }}>
+                AI COACH VOICE
+              </label>
+              <select
+                value={coachVoiceModel}
+                onChange={handleCoachVoiceModelChange}
+                style={{
+                  width: "100%",
+                  padding: "0.6rem",
+                  background: "#000",
+                  border: `2px solid ${t.accent}`,
+                  borderRadius: "8px",
+                  color: "#fff",
+                  fontSize: "14px",
+                  boxShadow: `0 0 10px ${t.shadowXs}`
+                }}
+              >
+                {VOICE_MODEL_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={previewCoachVoice}
+                style={{
+                  marginTop: "0.6rem",
+                  width: "100%",
+                  padding: "0.5rem 0.7rem",
+                  background: "#000000",
+                  border: `2px solid ${t.accent}`,
+                  borderRadius: "8px",
+                  color: t.accent,
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "12px"
+                }}
+              >
+                Preview Voice
+              </button>
+            </div>
             {isEditing ? (
               <div>
                 <div style={{ marginBottom: "1rem" }}>

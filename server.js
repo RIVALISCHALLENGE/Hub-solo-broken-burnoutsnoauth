@@ -4,7 +4,7 @@ const { randomUUID } = require('crypto');
 
 const { registerChatRoutes, getOpenAIClientExported } = require("./replit_integrations/chat");
 const { registerImageRoutes } = require("./replit_integrations/image");
-const { registerLiveEngineSyncRoutes } = require("./replit_integrations/live-engine-sync");
+const { getRandomSocialImage, getSocialImageById } = require("./replit_integrations/live-engine-sync/socialImages");
 const { WebhookHandlers } = require("./stripe/webhookHandlers");
 const { getUncachableStripeClient, getStripePublishableKey, getStripeSync } = require("./stripe/stripeClient");
 const { runMigrations } = require('stripe-replit-sync');
@@ -149,6 +149,349 @@ function sendStripeError(res, status, message) {
 function sendAuthError(res) {
   return res.status(401).json({ error: 'Unauthorized' });
 }
+
+function getLiveEngineBaseUrl() {
+  return (process.env.LIVE_ENGINE_URL || '').replace(/\/$/, '');
+}
+
+async function callLiveEngine(path, method = 'GET', body = null) {
+  const baseUrl = getLiveEngineBaseUrl();
+  if (!baseUrl) {
+    throw new Error('LIVE_ENGINE_URL is not configured');
+  }
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.LIVE_ENGINE_API_KEY) {
+    headers.Authorization = `Bearer ${process.env.LIVE_ENGINE_API_KEY}`;
+  }
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message = data?.error || data?.message || `Live Engine request failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+app.get('/api/live-engine/health', async (_req, res) => {
+  try {
+    const health = await callLiveEngine('/health', 'GET');
+    res.json({ success: true, health });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/live-engine/rooms/create', async (req, res) => {
+  try {
+    const { gameMode, exerciseName, showdown } = req.body || {};
+    const created = await callLiveEngine('/sessions', 'POST', {
+      gameMode: gameMode || 'classic',
+      exerciseName: exerciseName || showdown?.name || 'pushups',
+      showdown: showdown?.id || 'hub',
+    });
+
+    res.json({
+      success: true,
+      sessionId: created?.sessionId || created?.id || null,
+      room: created || null,
+    });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/live-engine/rooms/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const room = await callLiveEngine(`/sessions/${sessionId}`, 'GET');
+    res.json({ success: true, room });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/live-engine/rooms/:sessionId/start', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const started = await callLiveEngine(`/sessions/${sessionId}/start`, 'POST', req.body || {});
+    res.json({ success: true, data: started });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/live-engine/rooms/:sessionId/end', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const ended = await callLiveEngine(`/sessions/${sessionId}/end`, 'POST', req.body || {});
+    res.json({ success: true, data: ended });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/live-engine/sessions/ended', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const expectedSecret = process.env.HUB_API_SECRET;
+
+    if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const {
+      sessionId,
+      endedAt,
+      winner,
+      finalLeaderboard,
+      sessionDurationMs,
+      exerciseName,
+      gameMode,
+      socialImage,
+      imageId,
+      imageUrl,
+    } = req.body || {};
+
+    if (!sessionId || !Array.isArray(finalLeaderboard)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: sessionId, finalLeaderboard[]',
+      });
+    }
+
+    const { db } = require('./src/firebase_server');
+
+    const selectedSocialImage = socialImage
+      || (imageId ? getSocialImageById(imageId) : null)
+      || (imageUrl ? { id: null, url: imageUrl, description: 'Provided social image' } : null)
+      || getRandomSocialImage();
+
+    await db.collection('liveSessionArchive').doc(sessionId).set(
+      {
+        sessionId,
+        exerciseName: exerciseName || null,
+        gameMode: gameMode || 'standard',
+        endedAt: endedAt || Date.now(),
+        durationMs: Number.isFinite(Number(sessionDurationMs)) ? Number(sessionDurationMs) : null,
+        winner: winner || null,
+        finalLeaderboard,
+        socialImage: selectedSocialImage,
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      sessionId,
+      socialImage: selectedSocialImage,
+      message: `Session ${sessionId} archived`,
+    });
+  } catch (error) {
+    console.error('[LiveEngineSync] Session archive failed:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to archive session',
+      message: error.message,
+    });
+  }
+});
+
+app.get('/api/live-engine/session/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { db } = require('./src/firebase_server');
+
+    const archiveDoc = await db.collection('liveSessionArchive').doc(sessionId).get();
+    if (!archiveDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      sessionId,
+      ...archiveDoc.data(),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch session data',
+      message: error.message,
+    });
+  }
+});
+
+app.post('/api/live-engine/rooms/:sessionId/discord-vc', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const baseUrl = getLiveEngineBaseUrl();
+
+    if (!baseUrl) {
+      return res.status(400).json({ success: false, error: 'LIVE_ENGINE_URL is not configured' });
+    }
+
+    const discordBaseUrl = (process.env.LIVE_ENGINE_DISCORD_BOT_URL || '').replace(/\/$/, '');
+    if (!discordBaseUrl) {
+      return res.status(400).json({ success: false, error: 'LIVE_ENGINE_DISCORD_BOT_URL is not configured' });
+    }
+
+    const payload = {
+      sessionId,
+      guildId: process.env.DISCORD_GUILD_ID || undefined,
+    };
+
+    const response = await fetch(`${discordBaseUrl}/create-vc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = null;
+    }
+
+    if (!response.ok) {
+      const message = data?.error || data?.message || `Discord VC request failed (${response.status})`;
+      return res.status(502).json({ success: false, error: message });
+    }
+
+    const inviteLink = data?.inviteLink || data?.discordLink || data?.url || '';
+    res.json({ success: true, inviteLink, data });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/live-engine/share-bonus', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const expectedSecret = process.env.HUB_API_SECRET;
+
+    if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const {
+      userId,
+      sessionId,
+      platform,
+      bonusTickets,
+      sharedAt,
+      postUrl,
+    } = req.body || {};
+
+    if (!userId || !sessionId || !platform) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userId, sessionId, platform',
+      });
+    }
+
+    const { db, admin } = require('./src/firebase_server');
+
+    const normalizedPlatform = String(platform).toLowerCase();
+    const ticketAmountRaw = Number(bonusTickets);
+    const ticketAmount = Number.isFinite(ticketAmountRaw) && ticketAmountRaw > 0 ? Math.floor(ticketAmountRaw) : 100;
+    const shareEventId = `${sessionId}_${normalizedPlatform}`;
+
+    const userRef = db.collection('users').doc(userId);
+    const shareBonusRef = userRef.collection('liveShareBonuses').doc(shareEventId);
+    const archiveRef = db.collection('liveSessionArchive').doc(sessionId);
+
+    const result = await db.runTransaction(async (transaction) => {
+      const shareSnap = await transaction.get(shareBonusRef);
+      if (shareSnap.exists) {
+        return { alreadyAwarded: true };
+      }
+
+      transaction.set(
+        userRef,
+        {
+          userId,
+          ticketBalance: admin.firestore.FieldValue.increment(ticketAmount),
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+
+      transaction.set(
+        shareBonusRef,
+        {
+          userId,
+          sessionId,
+          platform: normalizedPlatform,
+          bonusTickets: ticketAmount,
+          sharedAt: sharedAt ? new Date(sharedAt) : new Date(),
+          postUrl: postUrl || '',
+          createdAt: new Date(),
+        },
+        { merge: true }
+      );
+
+      transaction.set(
+        archiveRef,
+        {
+          socialShares: {
+            [normalizedPlatform]: {
+              userId,
+              bonusTickets: ticketAmount,
+              sharedAt: sharedAt ? new Date(sharedAt) : new Date(),
+              postUrl: postUrl || '',
+            },
+          },
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+
+      return { alreadyAwarded: false };
+    });
+
+    if (result.alreadyAwarded) {
+      return res.status(200).json({
+        success: true,
+        alreadyAwarded: true,
+        message: `Share bonus already awarded for ${sessionId} on ${normalizedPlatform}`,
+      });
+    }
+
+    console.log(`[LiveEngineSync] ✅ Share bonus awarded: user ${userId}, session ${sessionId}, platform ${normalizedPlatform}, +${ticketAmount} tickets`);
+
+    return res.status(200).json({
+      success: true,
+      alreadyAwarded: false,
+      userId,
+      sessionId,
+      platform: normalizedPlatform,
+      awardedTickets: ticketAmount,
+      message: `Share bonus awarded: +${ticketAmount} tickets`,
+    });
+  } catch (error) {
+    console.error('[LiveEngineSync] Share bonus failed:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to process share bonus',
+      message: error.message,
+    });
+  }
+});
 
 app.get('/api/stripe/publishable-key', async (req, res) => {
   try {
@@ -763,9 +1106,6 @@ app.post("/api/admin/broadcast", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-// Register Live Engine Sync Routes
-registerLiveEngineSyncRoutes(app);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

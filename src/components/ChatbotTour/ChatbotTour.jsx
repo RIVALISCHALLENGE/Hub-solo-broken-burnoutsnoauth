@@ -15,8 +15,10 @@ import TourStep, { TOUR_STEPS } from './TourStep.jsx';
 import LogsGraph from './LogsGraph.jsx';
 import NutritionalCoach from './NutritionalCoach.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
+import { DEFAULT_VOICE_MODEL, primeVoiceCoach, speakCoach } from '../../logic/voiceCoach.js';
 
 const INTAKE_START_STEP = 3;
+const COACH_VOICE_STORAGE_KEY = 'rivalis_coach_voice_model';
 
 const TOUR_QUESTIONS = [
   { field: 'gender', question: "What is your gender? This helps calibrate your training baseline.", options: ['Male', 'Female', 'Non-Binary', 'Prefer not to say'] },
@@ -88,6 +90,31 @@ function extractRivalisPlanJson(messageText) {
   }
 }
 
+function cleanTextForSpeech(text) {
+  return String(text || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function personalizeCoachMessage(text, userName) {
+  const safeText = String(text || '').trim();
+  const safeName = String(userName || '').trim();
+  if (!safeText || !safeName) return safeText;
+
+  const lowerText = safeText.toLowerCase();
+  const lowerName = safeName.toLowerCase();
+
+  if (lowerText.includes(lowerName)) return safeText;
+  if (safeText.startsWith(`${safeName},`) || safeText.startsWith(`${safeName} `) || safeText.startsWith(`${safeName}:`)) {
+    return safeText;
+  }
+
+  return `${safeName}, ${safeText}`;
+}
+
 const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
   const t = useTheme();
   const [messages, setMessages] = useState([]);
@@ -109,16 +136,42 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
   });
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
+  const lastSpokenMessageIdRef = useRef(null);
+  const lastNarratedTourStepRef = useRef(-1);
+  const lastSpeechTimeRef = useRef(0);
 
   const isPro = userProfile?.subscriptionStatus === 'active';
+  const userName = userProfile?.nickname || user?.displayName || 'Rival';
+
+  const getCoachVoiceModel = useCallback(() => {
+    if (typeof window === 'undefined') return DEFAULT_VOICE_MODEL;
+    return window.localStorage.getItem(COACH_VOICE_STORAGE_KEY) || DEFAULT_VOICE_MODEL;
+  }, []);
+
+  const narrateCoachText = useCallback((text, options = {}) => {
+    const spokenText = cleanTextForSpeech(text);
+    if (!spokenText) return;
+
+    const now = Date.now();
+    if (!options.force && now - lastSpeechTimeRef.current < 220) return;
+    lastSpeechTimeRef.current = now;
+
+    primeVoiceCoach();
+    speakCoach(spokenText, {
+      voiceModel: getCoachVoiceModel(),
+      interrupt: Boolean(options.interrupt),
+    });
+  }, [getCoachVoiceModel]);
 
   const addBotMessage = useCallback((text, delay = 0) => {
+    const personalizedText = personalizeCoachMessage(text, userName);
+
     if (delay > 0) {
       setIsLoading(true);
       setTimeout(() => {
         setMessages(prev => [...prev, { 
           id: `bot-${Date.now()}-${Math.random()}`, 
-          text, 
+          text: personalizedText, 
           isBot: true, 
           timestamp: new Date() 
         }]);
@@ -127,12 +180,12 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
     } else {
       setMessages(prev => [...prev, { 
         id: `bot-${Date.now()}-${Math.random()}`, 
-        text, 
+        text: personalizedText, 
         isBot: true, 
         timestamp: new Date() 
       }]);
     }
-  }, []);
+  }, [userName]);
 
   const logCheckIn = useCallback(async (mood, physical, note) => {
     if (!user) return;
@@ -211,6 +264,38 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (!messages.length) return;
+
+    const latestMessage = messages[messages.length - 1];
+    if (!latestMessage?.isBot) return;
+
+    const shouldNarrate = showTour || checkInPhase !== null;
+    if (!shouldNarrate) return;
+
+    if (lastSpokenMessageIdRef.current === latestMessage.id) return;
+    lastSpokenMessageIdRef.current = latestMessage.id;
+
+    narrateCoachText(latestMessage.text, { interrupt: false });
+  }, [messages, showTour, checkInPhase, narrateCoachText]);
+
+  useEffect(() => {
+    if (!showTour) return;
+    if (lastNarratedTourStepRef.current === tourStep) return;
+
+    const currentStep = TOUR_STEPS[tourStep];
+    if (!currentStep) return;
+
+    lastNarratedTourStepRef.current = tourStep;
+    narrateCoachText(`${currentStep.title}. ${currentStep.description}`, { interrupt: true, force: true });
+  }, [showTour, tourStep, narrateCoachText]);
+
+  useEffect(() => {
+    if (!showTour) {
+      lastNarratedTourStepRef.current = -1;
+    }
+  }, [showTour]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 768px)');
@@ -397,6 +482,8 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
       const authHeaders = await getAuthHeaders();
       
       const userContext = [
+        `Preferred name: ${userName}`,
+        `Address the user as ${userName} in every response`,
         userProfile?.goals && `Goal: ${userProfile.goals}`,
         userProfile?.reason && `Reason: ${userProfile.reason}`,
         userProfile?.fitnessLevel && `Fitness level: ${userProfile.fitnessLevel}`,
@@ -477,8 +564,9 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
               const data = JSON.parse(line.slice(6));
               if (data.content) {
                 fullText += data.content;
+                const personalized = personalizeCoachMessage(fullText, userName);
                 setMessages(prev => prev.map(m => 
-                  m.id === assistantMsgId ? { ...m, text: fullText } : m
+                  m.id === assistantMsgId ? { ...m, text: personalized } : m
                 ));
               }
             } catch (e) {

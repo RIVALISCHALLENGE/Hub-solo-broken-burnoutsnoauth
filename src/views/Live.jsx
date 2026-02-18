@@ -36,6 +36,7 @@ export default function Live({ user, userProfile }) {
   const [poseState, setPoseState] = useState("IDLE");
   const [cameraActive, setCameraActive] = useState(false);
   const [discordLinkInput, setDiscordLinkInput] = useState("");
+  const [createRoomError, setCreateRoomError] = useState("");
   const timerRef = useRef(null);
   const stateRefsRef = useRef(createStateRefs());
   const autoCompleteTriggered = useRef(false);
@@ -106,6 +107,7 @@ export default function Live({ user, userProfile }) {
   const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   const handleCreateRoom = async () => {
+    setCreateRoomError("");
     if (!selectedShowdown) return;
     const res = await LiveService.createRoom(
       user.uid,
@@ -117,6 +119,9 @@ export default function Live({ user, userProfile }) {
     if (res.success) {
       setCurrentRoomId(res.roomId);
       setPhase("lobby");
+    } else {
+      setCreateRoomError(res.error || "Failed to create room. Please try again.");
+      if (window && window.console) console.error("Create room error:", res.error);
     }
   };
 
@@ -777,7 +782,27 @@ export default function Live({ user, userProfile }) {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #050505 0%, #0a0a0a 100%)", color: "#fff" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #050505 0%, #0a0a0a 100%)", color: "#fff", position: 'relative' }}>
+      {createRoomError && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
+          color: '#fff',
+          background: '#ff3050',
+          borderBottom: '2px solid #fff',
+          fontWeight: 700,
+          fontSize: 15,
+          textAlign: 'center',
+          padding: '16px 8px',
+          boxShadow: '0 2px 16px #ff305088',
+        }}>
+          {createRoomError}
+          <span style={{ marginLeft: 16, cursor: 'pointer', fontWeight: 400 }} onClick={() => setCreateRoomError("")}>[dismiss]</span>
+        </div>
+      )}
       <div style={{ padding: "32px 24px 16px" }}>
         <h1 style={{ fontFamily: "'Press Start 2P', cursive", fontSize: "22px", color: t.accent, marginBottom: "6px", textShadow: `0 0 20px ${t.accent}40` }}>LIVE ARENA</h1>
         <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>Challenge rivals in real-time showdowns. Pick your battle, set the rules, dominate.</p>
@@ -837,6 +862,11 @@ export default function Live({ user, userProfile }) {
           ))}
         </div>
 
+        {createRoomError && (
+          <div style={{ color: '#ff3050', background: 'rgba(255,48,80,0.08)', border: '1px solid #ff3050', borderRadius: 8, padding: 12, marginBottom: 16, fontWeight: 700, fontSize: 13, textAlign: 'center' }}>
+            {createRoomError}
+          </div>
+        )}
         <button
           onClick={handleCreateRoom}
           disabled={!selectedShowdown}
