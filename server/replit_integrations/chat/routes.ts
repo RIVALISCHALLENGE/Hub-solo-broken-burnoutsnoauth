@@ -10,6 +10,17 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+function extractPreferredName(userContext = ""): string | null {
+  const text = String(userContext || "");
+  if (!text) return null;
+
+  const match = text.match(/preferred\s+name\s*:\s*([^,\n]+)/i);
+  if (!match || !match[1]) return null;
+
+  const parsed = match[1].trim();
+  return parsed || null;
+}
+
 export function registerChatRoutes(app: Express): void {
   // Get all conversations
   app.get("/api/conversations", async (req: Request, res: Response) => {
@@ -66,8 +77,13 @@ export function registerChatRoutes(app: Express): void {
   app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
+<<<<<<< HEAD
       const { content, userId, userEmail } = req.body;
       const filter = new Filter();
+=======
+      const { content, userContext } = req.body;
+      const preferredName = extractPreferredName(userContext) || "Rival";
+>>>>>>> fd3c5c77fd87dbbad7751416d155ae74eae282b0
 
       // Moderation: check for profanity or flagged content
       const isFlagged = filter.isProfane(content);
@@ -109,7 +125,7 @@ export function registerChatRoutes(app: Express): void {
         messages: [
           {
             role: "system",
-            content: "You are the Rivalis AI Fitness Coach. Your persona is high-energy, motivating, and a bit 'cyberpunk gritty'. You use terms like 'Rival', 'Neural Link', 'Bio-metric upgrade', and 'Sector'. You don't just give advice; you challenge the user to be their best version. Keep responses concise but packed with personality. If they are in a 'tour', help guide them to the next step when they ask."
+            content: `You are the Rivalis AI Fitness Coach. Your persona is high-energy, motivating, and a bit 'cyberpunk gritty'. You use terms like 'Rival', 'Neural Link', 'Bio-metric upgrade', and 'Sector'. You don't just give advice; you challenge the user to be their best version. Keep responses concise but packed with personality. If they are in a 'tour', help guide them to the next step when they ask. The user preferred name is ${preferredName}. You must directly address the user by this preferred name in every response.`
           },
           ...chatMessages
         ],
@@ -118,6 +134,9 @@ export function registerChatRoutes(app: Express): void {
       });
 
       let fullResponse = "";
+      const forcedPrefix = `${preferredName}, `;
+      fullResponse += forcedPrefix;
+      res.write(`data: ${JSON.stringify({ content: forcedPrefix })}\n\n`);
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || "";

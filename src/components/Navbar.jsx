@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { auth } from "../firebase.js";
 import { useTheme } from "../context/ThemeContext.jsx";
+import ThemeToggle from "./ThemeToggle.jsx";
 
-export default function Navbar({ user, userProfile, theme, cycleTheme }) {
+export default function Navbar({ user, userProfile, themeMode, toggleThemeMode }) {
   const [open, setOpen] = useState(false);
   const [profileSubmenuOpen, setProfileSubmenuOpen] = useState(false);
   const t = useTheme();
@@ -25,18 +26,7 @@ export default function Navbar({ user, userProfile, theme, cycleTheme }) {
     <nav className="navbar">
       <div className="logo">RIVALIS Hub</div>
       <div className="nav-right">
-        <button 
-          onClick={cycleTheme}
-          className="theme-toggle-btn"
-          style={{
-            width: "40px",
-            height: "40px",
-            fontSize: "1.2rem",
-          }}
-          title="Cycle Theme"
-        >
-          {theme === "red-black" ? "🔴" : theme === "white-black" ? "⚪" : "⚫"}
-        </button>
+        <ThemeToggle mode={themeMode} onToggle={toggleThemeMode} />
         {hasCompletedSetup && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {avatarURL && (

@@ -7,6 +7,9 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { updateProfile } from "firebase/auth";
 import WaitingForUpload from "./WaitingForUpload.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
+import { DEFAULT_VOICE_MODEL, VOICE_MODEL_OPTIONS, primeVoiceCoach, speakCoach } from "../logic/voiceCoach.js";
+
+const COACH_VOICE_STORAGE_KEY = "rivalis_coach_voice_model";
 
 const avatarStyles = [
   { id: "adventurer", name: "Adventurer" },
@@ -65,15 +68,33 @@ export default function Profile({ user, userProfile }) {
   const [fitnessLevel, setFitnessLevel] = useState(userProfile?.fitnessLevel || "");
   const [workoutFrequency, setWorkoutFrequency] = useState(userProfile?.workoutFrequency || "");
   const [profileInjuries, setProfileInjuries] = useState(userProfile?.injuries || "");
+  const [profileGoalsText, setProfileGoalsText] = useState(
+    userProfile?.goals || (Array.isArray(userProfile?.fitnessGoals) ? userProfile.fitnessGoals.join(", ") : "")
+  );
+  const [profileReasonText, setProfileReasonText] = useState(
+    userProfile?.reason || (Array.isArray(userProfile?.appSeeking) ? userProfile.appSeeking.join(", ") : (userProfile?.appSeeking || ""))
+  );
   const [aiPlan, setAiPlan] = useState(null);
   const [aiPlanLoading, setAiPlanLoading] = useState(false);
   const [showFullPlan, setShowFullPlan] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(max-width: 768px)").matches;
+  });
+  const [isTinyViewport, setIsTinyViewport] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(max-width: 380px)").matches;
+  });
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [searchEmail, setSearchEmail] = useState("");
   const [activeChallenges, setActiveChallenges] = useState([]);
   const [lookingForBuddy, setLookingForBuddy] = useState(userProfile?.lookingForBuddy || false);
   const [potentialBuddies, setPotentialBuddies] = useState([]);
+  const [coachVoiceModel, setCoachVoiceModel] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_VOICE_MODEL;
+    return window.localStorage.getItem(COACH_VOICE_STORAGE_KEY) || DEFAULT_VOICE_MODEL;
+  });
 
   useEffect(() => {
     if (userProfile) {
@@ -87,6 +108,30 @@ export default function Profile({ user, userProfile }) {
       UserService.getUsersLookingForBuddy().then(setPotentialBuddies);
     }
   }, [user]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 768px)");
+    const onChange = (event) => setIsMobileViewport(event.matches);
+    if (media.addEventListener) media.addEventListener("change", onChange);
+    else media.addListener(onChange);
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", onChange);
+      else media.removeListener(onChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 380px)");
+    const onChange = (event) => setIsTinyViewport(event.matches);
+    if (media.addEventListener) media.addEventListener("change", onChange);
+    else media.addListener(onChange);
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", onChange);
+      else media.removeListener(onChange);
+    };
+  }, []);
 
   const handleToggleLooking = async () => {
     const newValue = !lookingForBuddy;
@@ -173,6 +218,8 @@ export default function Profile({ user, userProfile }) {
       setFitnessLevel(userProfile.fitnessLevel || "");
       setWorkoutFrequency(userProfile.workoutFrequency || "");
       setProfileInjuries(userProfile.injuries || "");
+      setProfileGoalsText(userProfile.goals || (Array.isArray(userProfile.fitnessGoals) ? userProfile.fitnessGoals.join(", ") : ""));
+      setProfileReasonText(userProfile.reason || (Array.isArray(userProfile.appSeeking) ? userProfile.appSeeking.join(", ") : (userProfile.appSeeking || "")));
     }
   }, [userProfile]);
 
@@ -194,20 +241,29 @@ export default function Profile({ user, userProfile }) {
     const weightNum = parseFloat(profileWeight) || 0;
     const calculatedBmi = totalInches > 0 && weightNum > 0 ? parseFloat(((weightNum / (totalInches * totalInches)) * 703).toFixed(1)) : null;
     const heightStr = feet > 0 ? `${Math.floor(feet)}'${Math.floor(inches)}"` : "";
+    const normalizedGoals = profileGoalsText.trim();
+    const normalizedReason = profileReasonText.trim();
+    const normalizedFitnessGoals = normalizedGoals ? [normalizedGoals] : [];
+    const normalizedAppSeeking = normalizedReason ? [normalizedReason] : [];
 
     const result = await UserService.updateUserProfile(user.uid, { 
-      bio, nickname, fitnessGoals, appSeeking,
+      bio,
+      nickname,
+      fitnessGoals: normalizedFitnessGoals,
+      appSeeking: normalizedAppSeeking,
       age, gender, fitnessLevel, workoutFrequency,
       heightFeet: String(Math.floor(feet)),
       heightInches: String(Math.floor(inches)),
       height: heightStr,
       weight: profileWeight,
       bmi: calculatedBmi,
-      injuries: profileInjuries
+      injuries: profileInjuries,
+      goals: normalizedGoals,
+      reason: normalizedReason
     });
     if (result.success) {
       setIsEditing(false);
-      if (fitnessGoals.length > 0 || appSeeking.length > 0) {
+      if (normalizedGoals || normalizedReason) {
         generateAiPlan();
       }
     }
@@ -228,8 +284,8 @@ export default function Profile({ user, userProfile }) {
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
-          fitnessGoals: fitnessGoals.length > 0 ? fitnessGoals : (userProfile?.fitnessGoals || []),
-          appSeeking: appSeeking || userProfile?.appSeeking || "",
+          fitnessGoals: profileGoalsText.trim() ? [profileGoalsText.trim()] : (fitnessGoals.length > 0 ? fitnessGoals : (userProfile?.fitnessGoals || [])),
+          appSeeking: profileReasonText.trim() ? [profileReasonText.trim()] : (appSeeking || userProfile?.appSeeking || ""),
           age: age || userProfile?.age || "",
           gender: gender || userProfile?.gender || "",
           fitnessLevel: fitnessLevel || userProfile?.fitnessLevel || "",
@@ -247,7 +303,7 @@ export default function Profile({ user, userProfile }) {
     } finally {
       setAiPlanLoading(false);
     }
-  }, [user, fitnessGoals, appSeeking, age, gender, fitnessLevel, workoutFrequency, profileInjuries, userProfile]);
+  }, [user, profileGoalsText, profileReasonText, fitnessGoals, appSeeking, age, gender, fitnessLevel, workoutFrequency, profileInjuries, userProfile]);
 
   const toggleFitnessGoal = (goal) => {
     setFitnessGoals(prev => 
@@ -259,6 +315,23 @@ export default function Profile({ user, userProfile }) {
     setAppSeeking(prev =>
       prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]
     );
+  };
+
+  const handleCoachVoiceModelChange = (event) => {
+    const selected = event.target.value;
+    setCoachVoiceModel(selected);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(COACH_VOICE_STORAGE_KEY, selected);
+    }
+  };
+
+  const previewCoachVoice = () => {
+    const userName = nickname?.trim() || userProfile?.nickname || user?.displayName || "Rival";
+    primeVoiceCoach();
+    speakCoach(`Ready when you are, ${userName}. Your AI coach voice is active.`, {
+      voiceModel: coachVoiceModel,
+      interrupt: true,
+    });
   };
 
   const saveAvatar = async () => {
@@ -363,19 +436,19 @@ export default function Profile({ user, userProfile }) {
   return (
     <div className="hero-background">
       <div style={{ 
-        width: "95%", 
-        maxWidth: "900px",
-        minHeight: "80vh",
+        width: isMobileViewport ? "100%" : "95%", 
+        maxWidth: isMobileViewport ? "100%" : "900px",
+        minHeight: isMobileViewport ? "auto" : "80vh",
         background: "#000000",
         border: `2px solid ${t.accent}`,
-        borderRadius: "12px",
-        padding: "2rem",
+        borderRadius: isTinyViewport ? "8px" : (isMobileViewport ? "10px" : "12px"),
+        padding: isTinyViewport ? "0.75rem" : (isMobileViewport ? "1rem" : "2rem"),
         boxShadow: `0 0 30px ${t.shadowMd}, inset 0 0 20px ${t.shadowXxs}`
       }}>
         <div style={{
           display: "flex",
-          gap: "2rem",
-          marginBottom: "2rem",
+          gap: isTinyViewport ? "0.75rem" : (isMobileViewport ? "1rem" : "2rem"),
+          marginBottom: isTinyViewport ? "0.75rem" : (isMobileViewport ? "1rem" : "2rem"),
           flexWrap: "wrap"
         }}>
           <div style={{
@@ -400,8 +473,8 @@ export default function Profile({ user, userProfile }) {
                     alt={nickname} 
                     className="avatar-image"
                     style={{ 
-                      width: "120px", 
-                      height: "120px", 
+                      width: isTinyViewport ? "90px" : "120px", 
+                      height: isTinyViewport ? "90px" : "120px", 
                       borderRadius: "50%", 
                       background: "#fff",
                       border: `4px solid ${t.accent}`,
@@ -438,7 +511,7 @@ export default function Profile({ user, userProfile }) {
             )}
           </div>
 
-          <div style={{ flex: 1, minWidth: "300px" }}>
+          <div style={{ flex: 1, minWidth: isMobileViewport ? "100%" : "300px" }}>
             <h3 style={{ 
               color: t.accent,
               textShadow: `0 0 15px ${t.shadow}`,
@@ -447,6 +520,54 @@ export default function Profile({ user, userProfile }) {
               Identity Details
             </h3>
             <div className="profile-bio-section">
+            <div style={{
+              marginBottom: "1rem",
+              padding: "10px",
+              background: t.hoverBg,
+              border: `1px solid ${t.shadowXs}`,
+              borderRadius: "8px"
+            }}>
+              <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive" }}>
+                AI COACH VOICE
+              </label>
+              <select
+                value={coachVoiceModel}
+                onChange={handleCoachVoiceModelChange}
+                style={{
+                  width: "100%",
+                  padding: "0.6rem",
+                  background: "#000",
+                  border: `2px solid ${t.accent}`,
+                  borderRadius: "8px",
+                  color: "#fff",
+                  fontSize: "14px",
+                  boxShadow: `0 0 10px ${t.shadowXs}`
+                }}
+              >
+                {VOICE_MODEL_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={previewCoachVoice}
+                style={{
+                  marginTop: "0.6rem",
+                  width: "100%",
+                  padding: "0.5rem 0.7rem",
+                  background: "#000000",
+                  border: `2px solid ${t.accent}`,
+                  borderRadius: "8px",
+                  color: t.accent,
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "12px"
+                }}
+              >
+                Preview Voice
+              </button>
+            </div>
             {isEditing ? (
               <div>
                 <div style={{ marginBottom: "1rem" }}>
@@ -488,7 +609,7 @@ export default function Profile({ user, userProfile }) {
                   />
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobileViewport ? "1fr" : "1fr 1fr", gap: isTinyViewport ? "0.5rem" : "0.75rem", marginBottom: "1rem" }}>
                   <div>
                     <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive" }}>AGE</label>
                     <input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="25" style={{ width: "100%", padding: "0.6rem", background: "#000", border: `2px solid ${t.accent}`, borderRadius: "8px", color: "#fff", fontSize: "14px", boxShadow: `0 0 10px ${t.shadowXs}` }} />
@@ -564,52 +685,46 @@ export default function Profile({ user, userProfile }) {
                   })()}
                 </div>
 
-                <div style={{ marginBottom: "1.5rem" }}>
-                  <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.8rem", fontFamily: "'Press Start 2P', cursive" }}>FITNESS GOALS</label>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {fitnessGoalOptions.map(goal => (
-                      <button
-                        key={goal}
-                        onClick={() => toggleFitnessGoal(goal)}
-                        style={{
-                          padding: "0.5rem 1rem",
-                          background: fitnessGoals.includes(goal) ? t.accent : "#000",
-                          border: `1px solid ${t.accent}`,
-                          borderRadius: "20px",
-                          color: "#fff",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                          transition: "all 0.2s"
-                        }}
-                      >
-                        {goal}
-                      </button>
-                    ))}
-                  </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive" }}>FITNESS GOALS</label>
+                  <textarea
+                    value={profileGoalsText}
+                    onChange={(e) => setProfileGoalsText(e.target.value)}
+                    placeholder="Ex: Build lean muscle, improve endurance"
+                    style={{
+                      width: "100%",
+                      minHeight: "72px",
+                      padding: "0.6rem",
+                      background: "#000",
+                      border: `2px solid ${t.accent}`,
+                      borderRadius: "8px",
+                      color: "#fff",
+                      fontSize: "14px",
+                      resize: "vertical",
+                      boxShadow: `0 0 10px ${t.shadowXs}`
+                    }}
+                  />
                 </div>
 
                 <div style={{ marginBottom: "1.5rem" }}>
-                  <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.8rem", fontFamily: "'Press Start 2P', cursive" }}>SEEKING IN RIVALIS</label>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {appSeekingOptions.map(option => (
-                      <button
-                        key={option}
-                        onClick={() => toggleAppSeeking(option)}
-                        style={{
-                          padding: "0.5rem 1rem",
-                          background: appSeeking.includes(option) ? t.accent : "#000",
-                          border: `1px solid ${t.accent}`,
-                          borderRadius: "20px",
-                          color: "#fff",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                          transition: "all 0.2s"
-                        }}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
+                  <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive" }}>REASON FOR JOINING RIVALIS</label>
+                  <textarea
+                    value={profileReasonText}
+                    onChange={(e) => setProfileReasonText(e.target.value)}
+                    placeholder="Ex: I want structured training and accountability"
+                    style={{
+                      width: "100%",
+                      minHeight: "72px",
+                      padding: "0.6rem",
+                      background: "#000",
+                      border: `2px solid ${t.accent}`,
+                      borderRadius: "8px",
+                      color: "#fff",
+                      fontSize: "14px",
+                      resize: "vertical",
+                      boxShadow: `0 0 10px ${t.shadowXs}`
+                    }}
+                  />
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
                   <button
@@ -639,8 +754,8 @@ export default function Profile({ user, userProfile }) {
                       setFitnessLevel(userProfile?.fitnessLevel || "");
                       setWorkoutFrequency(userProfile?.workoutFrequency || "");
                       setProfileInjuries(userProfile?.injuries || "");
-                      setFitnessGoals(userProfile?.fitnessGoals || []);
-                      setAppSeeking(Array.isArray(userProfile?.appSeeking) ? userProfile.appSeeking : (userProfile?.appSeeking ? [userProfile.appSeeking] : []));
+                      setProfileGoalsText(userProfile?.goals || (Array.isArray(userProfile?.fitnessGoals) ? userProfile.fitnessGoals.join(", ") : ""));
+                      setProfileReasonText(userProfile?.reason || (Array.isArray(userProfile?.appSeeking) ? userProfile.appSeeking.join(", ") : (userProfile?.appSeeking || "")));
                       setIsEditing(false);
                     }}
                     style={{
@@ -709,28 +824,24 @@ export default function Profile({ user, userProfile }) {
                   </div>
                 </div>
 
-                {fitnessGoals.length > 0 && (
+                {(userProfile?.goals || (Array.isArray(userProfile?.fitnessGoals) && userProfile.fitnessGoals.length > 0)) && (
                   <div style={{ marginBottom: "1rem" }}>
                     <div style={{ color: t.accent, fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive", marginBottom: "0.5rem" }}>GOALS</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                      {fitnessGoals.map(goal => (
-                        <span key={goal} style={{ background: t.hoverBg, padding: "2px 8px", borderRadius: "4px", fontSize: "0.8rem", border: `1px solid ${t.accent}` }}>{goal}</span>
-                      ))}
+                    <div style={{ background: t.hoverBg, padding: "10px", borderRadius: "8px", border: `1px solid ${t.shadowXs}`, color: "#fff", fontSize: "0.9rem", lineHeight: 1.5 }}>
+                      {userProfile?.goals || (Array.isArray(userProfile?.fitnessGoals) ? userProfile.fitnessGoals.join(", ") : "")}
                     </div>
                   </div>
                 )}
-                {appSeeking.length > 0 && (
+                {(userProfile?.reason || (Array.isArray(userProfile?.appSeeking) && userProfile.appSeeking.length > 0) || userProfile?.appSeeking) && (
                   <div style={{ marginBottom: "1.5rem" }}>
-                    <div style={{ color: t.accent, fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive", marginBottom: "0.5rem" }}>SEEKING</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                      {appSeeking.map(item => (
-                        <span key={item} style={{ background: t.hoverBg, padding: "2px 8px", borderRadius: "4px", fontSize: "0.8rem", border: `1px solid ${t.accent}` }}>{item}</span>
-                      ))}
+                    <div style={{ color: t.accent, fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive", marginBottom: "0.5rem" }}>REASON FOR JOINING RIVALIS</div>
+                    <div style={{ background: t.hoverBg, padding: "10px", borderRadius: "8px", border: `1px solid ${t.shadowXs}`, color: "#fff", fontSize: "0.9rem", lineHeight: 1.5 }}>
+                      {userProfile?.reason || (Array.isArray(userProfile?.appSeeking) ? userProfile.appSeeking.join(", ") : (userProfile?.appSeeking || ""))}
                     </div>
                   </div>
                 )}
 
-                {(fitnessGoals.length > 0 || appSeeking.length > 0) && (
+                {(Boolean(userProfile?.goals) || Boolean(userProfile?.reason) || fitnessGoals.length > 0 || appSeeking.length > 0) && (
                   <div style={{
                     background: "linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6))",
                     border: `1px solid ${t.accent}`,
@@ -898,8 +1009,8 @@ export default function Profile({ user, userProfile }) {
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "1rem",
+          gridTemplateColumns: `repeat(auto-fit, minmax(${isTinyViewport ? "120px" : (isMobileViewport ? "140px" : "200px")}, 1fr))`,
+          gap: isTinyViewport ? "0.6rem" : "1rem",
           marginBottom: "2rem"
         }}>
           <div style={{
@@ -983,7 +1094,7 @@ export default function Profile({ user, userProfile }) {
             <h3 style={{ color: t.accent, marginBottom: "1rem" }}>🎟️ Active Ticket References</h3>
             <div style={{ 
               display: "grid", 
-              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", 
+              gridTemplateColumns: `repeat(auto-fill, minmax(${isTinyViewport ? "120px" : "150px"}, 1fr))`, 
               gap: "0.5rem",
               maxHeight: "200px",
               overflowY: "auto",
@@ -1082,7 +1193,7 @@ export default function Profile({ user, userProfile }) {
           )}
 
           <h4 style={{ color: t.accent, fontSize: "0.7rem", marginBottom: "0.5rem" }}>YOUR BUDDIES</h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "1rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${isTinyViewport ? "84px" : "100px"}, 1fr))`, gap: isTinyViewport ? "0.6rem" : "1rem" }}>
             {friends.map(friend => (
               <div key={friend.userId} style={{ textAlign: "center" }}>
                 <img src={friend.avatarURL} alt={friend.nickname} style={{ width: "50px", height: "50px", borderRadius: "50%", border: `2px solid ${t.accent}` }} />
@@ -1103,8 +1214,8 @@ export default function Profile({ user, userProfile }) {
           </h3>
           <div style={{ 
             display: "grid", 
-            gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", 
-            gap: "1.5rem" 
+            gridTemplateColumns: `repeat(auto-fill, minmax(${isTinyViewport ? "150px" : (isMobileViewport ? "170px" : "250px")}, 1fr))`, 
+            gap: isTinyViewport ? "0.8rem" : "1.5rem" 
           }}>
             {defaultAchievements.map(achievement => (
               <div 

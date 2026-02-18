@@ -1,6 +1,9 @@
 const OpenAI = require("openai");
 const { chatStorage } = require("./storage.js");
 const { Parser } = require("json2csv");
+const { Pool } = require("pg");
+
+let pool = null;
 
 let openai = null;
 
@@ -18,7 +21,119 @@ function getOpenAIClient() {
   return openai;
 }
 
+function getPool() {
+  if (!pool && process.env.DATABASE_URL) {
+    pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+  }
+  return pool;
+}
+
+async function resolveSubscriptionAccess(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return { isPro: false, uid: null, userData: null };
+  }
+
+  try {
+    const token = authHeader.split("Bearer ")[1];
+    const { admin, db } = require("../../src/firebase_server");
+    const decoded = await admin.auth().verifyIdToken(token);
+    const uid = decoded.uid;
+
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+
+    if (userData?.subscriptionStatus === "active") {
+      return { isPro: true, uid, userData };
+    }
+
+    const customerId = userData?.stripeCustomerId;
+    const dbPool = getPool();
+
+    if (!customerId || !dbPool) {
+      return { isPro: false, uid, userData };
+    }
+
+    const result = await dbPool.query(
+      `SELECT status, id
+       FROM stripe.subscriptions
+       WHERE customer = $1 AND status IN ('active', 'trialing', 'past_due')
+       ORDER BY current_period_end DESC LIMIT 1`,
+      [customerId]
+    );
+
+    const sub = result.rows[0] || null;
+    const isPro = Boolean(sub && (sub.status === "active" || sub.status === "trialing"));
+
+    await db.collection("users").doc(uid).set(
+      {
+        subscriptionStatus: isPro ? "active" : "inactive",
+        subscriptionId: sub?.id || null,
+        subscriptionUpdatedAt: new Date(),
+      },
+      { merge: true }
+    );
+
+    return { isPro, uid, userData };
+  } catch (error) {
+    console.error("Subscription access resolution failed:", error.message);
+    return { isPro: false, uid: null, userData: null };
+  }
+}
+
 function registerChatRoutes(app) {
+  function extractPreferredName(userContext = "") {
+    const text = String(userContext || "");
+    if (!text) return null;
+
+    const match = text.match(/preferred\s+name\s*:\s*([^,\n]+)/i);
+    if (!match || !match[1]) return null;
+
+    const parsed = match[1].trim();
+    return parsed || null;
+  }
+
+  function buildFreeTierTeaser(userMessage = "") {
+    const text = (userMessage || "").toLowerCase();
+
+    if (/meal|nutrition|diet|macro/.test(text)) {
+      return [
+        "PREMIUM PREVIEW 🔒",
+        "",
+        "Rivalis Pro unlocks:",
+        "- Personalized nutrition protocols",
+        "- Macro-calibrated meal structures",
+        "- Goal-specific fueling timelines",
+        "",
+        "Unlock Rivalis Pro to activate your full personalized protocol.",
+      ].join("\n");
+    }
+
+    if (/workout|plan|program|routine|training/.test(text)) {
+      return [
+        "PREMIUM PREVIEW 🔒",
+        "",
+        "Rivalis Pro unlocks:",
+        "- Full in-app workout protocols",
+        "- Progressive overload programming",
+        "- Recovery and adaptation sequencing",
+        "",
+        "Unlock Rivalis Pro to activate your full personalized protocol.",
+      ].join("\n");
+    }
+
+    return [
+      "PREMIUM PREVIEW 🔒",
+      "",
+      "Rivalis Pro unlocks your full AI Coach capabilities:",
+      "- Personalized training systems",
+      "- Nutrition strategy and progress tracking",
+      "- Advanced protocol generation",
+      "",
+      "Unlock Rivalis Pro to activate your full personalized protocol.",
+    ].join("\n");
+  }
+
   // Export conversation to CSV
   app.get("/api/conversations/:id/export", async (req, res) => {
     try {
@@ -73,25 +188,40 @@ function registerChatRoutes(app) {
   app.post("/api/conversations/:id/messages", async (req, res) => {
     try {
       const conversationId = req.params.id;
-      const { content, isPro, userContext } = req.body;
+      const { content, userContext } = req.body;
+      const { isPro } = await resolveSubscriptionAccess(req);
+      const preferredName = extractPreferredName(userContext) || "Rival";
 
       if (!isPro) {
         const today = new Date().toISOString().split('T')[0];
         const cacheKey = `free_msgs_${conversationId}_${today}`;
         if (!global._freeMsgCounts) global._freeMsgCounts = {};
         global._freeMsgCounts[cacheKey] = (global._freeMsgCounts[cacheKey] || 0) + 1;
-        if (global._freeMsgCounts[cacheKey] > 10) {
+        if (global._freeMsgCounts[cacheKey] > 1000) {
           res.setHeader("Content-Type", "text/event-stream");
           res.setHeader("Cache-Control", "no-cache");
-          res.write(`data: ${JSON.stringify({ content: "You've reached your daily message limit. Upgrade to Rivalis Pro for unlimited coaching. 🔒" })}\n\n`);
+          res.write(`data: ${JSON.stringify({ content: "Daily free preview limit reached. Unlock Rivalis Pro for always-on coaching. 🔒" })}\n\n`);
           res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
           return res.end();
         }
       }
 
       await chatStorage.createMessage(conversationId, "user", content);
+
+      if (!isPro) {
+        const teaser = buildFreeTierTeaser(content || "");
+        await chatStorage.createMessage(conversationId, "assistant", teaser);
+
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.write(`data: ${JSON.stringify({ content: teaser })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        return res.end();
+      }
+
       const messages = await chatStorage.getMessagesByConversation(conversationId);
-      const recentMessages = isPro ? messages : messages.slice(-6);
+      const recentMessages = messages;
       const chatMessages = recentMessages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -142,11 +272,22 @@ COMMUNICATION PROTOCOL:
 - ONE QUESTION AT A TIME: When building a workout plan or gathering info, ask exactly one clarifying question and wait for the Rival's response.
 - CONCISE & IMPACTFUL: Use short, punchy sentences. 
 - STEP-BY-STEP: If providing a plan, give it in small, digestible phases rather than one giant dump.
+- SMART RESPONSE POLICY: If the user request is clear and answerable, provide a direct tactical answer immediately. Ask a clarifying question only when critical data is missing.
+
+RIVALIS INTEGRATION CONTRACT (MANDATORY for workout/program/plan requests):
+- After the human-readable response, include a machine-readable block exactly in this format:
+\`\`\`RIVALIS_PLAN_JSON
+{ "planName": "...", "days": [ { "day": "Day 1", "focus": "Arms", "mode": "Solo|Burnouts|Run", "exercises": [ { "name": "Push-ups", "sets": 4, "reps": "10-15", "restSec": 60 } ] } ] }
+\`\`\`
+- ONLY use these exact exercise names in JSON: Push-ups, Plank Up-Downs, Pike Push-ups, Shoulder Taps, Squats, Lunges, Glute Bridges, Calf Raises, Crunches, Plank, Russian Twists, Leg Raises, Jumping Jacks, High Knees, Burpees, Mountain Climbers, Outdoor Run.
+- Never output any equipment-based exercise in the JSON block.
+- Keep JSON valid and parseable.
 
 TONE:
 - Do not be generic. Be sharp, witty, and authoritative.
 - Keep responses concise but saturated with personality.
-- If the user is on a tour, guide them to the next sector of the hub.`;
+- If the user is on a tour, guide them to the next sector of the hub.
+- You MUST directly address the user by their preferred name in every response.`;
 
       const proEnhancement = isPro ? `
 
@@ -158,12 +299,17 @@ PRO MEMBER FEATURES (This user is a Rivalis Pro subscriber):
 - **ADVANCED ANALYTICS**: Offer detailed analysis of their training volume, intensity, and recovery needs.
 - **INJURY PREVENTION**: Provide prehab exercises, mobility work, and form cues for their specific needs.
 ${userContext ? `\nUSER CONTEXT: ${userContext}` : ''}
+- Preferred name: ${preferredName}
 - Address them as a valued Pro member. Provide the most detailed, personalized advice possible.` : `
 
 FREE TIER USER:
 - Provide basic fitness advice and motivation.
-- If the user asks for detailed meal plans, multi-week workout programs, or advanced goal tracking, briefly mention these are available with Rivalis Pro, then still give them a helpful but shorter response.
-- Do NOT gate basic fitness Q&A behind the subscription.`;
+- PREMIUM PREVIEW POLICY (STRICT): If the user asks for meal plans, full workout programs, long-term progression, or advanced tracking, provide ONLY a short preview (high-level bullet outline), not a full actionable plan.
+- Always end premium-preview responses with: "Unlock Rivalis Pro to activate your full personalized protocol."
+- Keep free-tier outputs concise and teaser-level for premium capabilities while still being helpful.
+- Do NOT gate basic fitness Q&A behind the subscription.
+- Preferred name: ${preferredName}
+- Address the user by preferred name in every response.`;
 
       const stream = await getOpenAIClient().chat.completions.create({
         model: isPro ? "gpt-5" : "gpt-5-nano",
@@ -175,10 +321,14 @@ FREE TIER USER:
           ...chatMessages
         ],
         stream: true,
-        max_completion_tokens: isPro ? 4096 : 1024,
+        max_completion_tokens: isPro ? 4096 : 700,
       });
 
       let fullResponse = "";
+      const forcedPrefix = `${preferredName}, `;
+      fullResponse += forcedPrefix;
+      res.write(`data: ${JSON.stringify({ content: forcedPrefix })}\n\n`);
+
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || "";
         if (content) {

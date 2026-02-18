@@ -15,9 +15,53 @@ import {
   runTransaction
 } from "firebase/firestore";
 
+const USE_LIVE_ENGINE_ROOMS = (import.meta.env.VITE_USE_LIVE_ENGINE_ROOMS || "false").toLowerCase() === "true";
+
+async function callHubLiveEngineBridge(path, method = "GET", body = null) {
+  const response = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok || data?.success === false) {
+    throw new Error(data?.error || data?.message || `Bridge request failed (${response.status})`);
+  }
+
+  return data;
+}
+
 export const LiveService = {
   async createRoom(hostId, hostName, hostAvatar, showdown, trickMode) {
     try {
+      let externalSessionId = null;
+      let discordVcLink = "";
+
+      if (USE_LIVE_ENGINE_ROOMS) {
+        const created = await callHubLiveEngineBridge("/api/live-engine/rooms/create", "POST", {
+          gameMode: trickMode || "classic",
+          exerciseName: showdown?.exercises?.[0] || showdown?.name || "pushups",
+          showdown,
+        });
+        externalSessionId = created?.sessionId || null;
+
+        if (externalSessionId) {
+          try {
+            const discord = await callHubLiveEngineBridge(`/api/live-engine/rooms/${externalSessionId}/discord-vc`, "POST", {});
+            discordVcLink = discord?.inviteLink || "";
+          } catch (error) {
+            console.warn("Discord VC provisioning failed:", error.message);
+          }
+        }
+      }
+
       const roomData = {
         hostId,
         hostName,
@@ -54,6 +98,8 @@ export const LiveService = {
         createdAt: Timestamp.now(),
         lastActivity: Timestamp.now(),
         finishedAt: null,
+        externalSessionId,
+        discordVcLink,
       };
       const docRef = await addDoc(collection(db, "liveRooms"), roomData);
       return { success: true, roomId: docRef.id };
@@ -173,6 +219,10 @@ export const LiveService = {
       const roomRef = doc(db, "liveRooms", roomId);
       const roomSnap = await getDoc(roomRef);
       const roomData = roomSnap.data();
+
+      if (USE_LIVE_ENGINE_ROOMS && roomData?.externalSessionId) {
+        await callHubLiveEngineBridge(`/api/live-engine/rooms/${roomData.externalSessionId}/start`, "POST", {});
+      }
 
       const playOrder = roomData.players.map((p) => p.userId).sort(() => Math.random() - 0.5);
       const players = roomData.players.map((p) => ({
@@ -393,6 +443,17 @@ export const LiveService = {
   async endMatch(roomId) {
     try {
       const roomRef = doc(db, "liveRooms", roomId);
+      const roomSnap = await getDoc(roomRef);
+      const roomData = roomSnap.exists() ? roomSnap.data() : null;
+
+      if (USE_LIVE_ENGINE_ROOMS && roomData?.externalSessionId) {
+        try {
+          await callHubLiveEngineBridge(`/api/live-engine/rooms/${roomData.externalSessionId}/end`, "POST", {});
+        } catch (error) {
+          console.warn("External session end failed:", error.message);
+        }
+      }
+
       await updateDoc(roomRef, {
         status: "finished",
         currentPhase: "results",
@@ -406,6 +467,20 @@ export const LiveService = {
 
   async deleteRoom(roomId) {
     try {
+      if (USE_LIVE_ENGINE_ROOMS) {
+        const roomRef = doc(db, "liveRooms", roomId);
+        const roomSnap = await getDoc(roomRef);
+        const roomData = roomSnap.exists() ? roomSnap.data() : null;
+
+        if (roomData?.externalSessionId) {
+          try {
+            await callHubLiveEngineBridge(`/api/live-engine/rooms/${roomData.externalSessionId}/end`, "POST", {});
+          } catch (error) {
+            console.warn("External room cleanup failed:", error.message);
+          }
+        }
+      }
+
       await deleteDoc(doc(db, "liveRooms", roomId));
       return { success: true };
     } catch (error) {

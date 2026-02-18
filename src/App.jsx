@@ -9,6 +9,7 @@ import LoadingScreen from "./components/LoadingScreen.jsx";
 import OnboardingSlides from "./components/OnboardingSlides.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Navbar from "./components/Navbar.jsx";
+import ThemeToggle from "./components/ThemeToggle.jsx";
 import AdBanner from "./components/AdBanner.jsx";
 import ChatbotTour from "./components/ChatbotTour/ChatbotTour.jsx";
 import BackgroundShell from "./components/BackgroundShell.jsx";
@@ -35,6 +36,14 @@ const BoxingArena = lazy(() => import("./boxing/pages/Arena.tsx"));
 const Subscription = lazy(() => import("./views/Subscription.jsx"));
 const FitnessDashboard = lazy(() => import("./views/FitnessDashboard.jsx"));
 
+const LEGACY_THEME_TO_MODE = {
+  dark: "dark",
+  light: "light",
+  "red-black": "dark",
+  "white-black": "light",
+  "black-white": "dark",
+};
+
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,11 +59,23 @@ export default function App() {
   const [isNewSignup, setIsNewSignup] = useState(false);
   const [initialHype, setInitialHype] = useState(false);
   const [showBot, setShowBot] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(max-width: 768px)").matches;
+  });
+  const [isTinyViewport, setIsTinyViewport] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(max-width: 380px)").matches;
+  });
   const [activeGame, setActiveGame] = useState(null);
 
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem("theme") || "red-black";
+  const [themeMode, setThemeMode] = useState(() => {
+    const savedMode = localStorage.getItem("themeMode");
+    const legacyTheme = localStorage.getItem("theme");
+    return LEGACY_THEME_TO_MODE[savedMode] || LEGACY_THEME_TO_MODE[legacyTheme] || "dark";
   });
+
+  const theme = themeMode === "light" ? "white-black" : "red-black";
 
   const launchGame = (url) => {
     setActiveGame(url);
@@ -73,11 +94,71 @@ export default function App() {
     const body = document.body;
     body.classList.remove("theme-red-black", "theme-white-black", "theme-black-white");
     body.classList.add(`theme-${theme}`);
+    localStorage.setItem("themeMode", themeMode);
     localStorage.setItem("theme", theme);
-  }, [theme]);
+  }, [theme, themeMode]);
 
-  const cycleTheme = () => {
-    setTheme((prev) => (prev === "red-black" ? "white-black" : "red-black"));
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 768px)");
+    const onChange = (event) => setIsMobileViewport(event.matches);
+
+    if (media.addEventListener) media.addEventListener("change", onChange);
+    else media.addListener(onChange);
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", onChange);
+      else media.removeListener(onChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 380px)");
+    const onChange = (event) => setIsTinyViewport(event.matches);
+
+    if (media.addEventListener) media.addEventListener("change", onChange);
+    else media.addListener(onChange);
+
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", onChange);
+      else media.removeListener(onChange);
+    };
+  }, []);
+
+  const toggleThemeMode = () => {
+    setThemeMode((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
+  const botStyles = {
+    botTrigger: {
+      position: "fixed",
+      bottom: isTinyViewport ? "74px" : (isMobileViewport ? "78px" : "85px"),
+      right: isTinyViewport ? "10px" : (isMobileViewport ? "14px" : "20px"),
+      background: "var(--accent-color, #FF0000)",
+      color: "#FFF",
+      border: "none",
+      borderRadius: "50%",
+      width: isTinyViewport ? "42px" : (isMobileViewport ? "46px" : "50px"),
+      height: isTinyViewport ? "42px" : (isMobileViewport ? "46px" : "50px"),
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontWeight: "bold",
+      cursor: "pointer",
+      boxShadow: "0 0 15px var(--accent-color, #FF0000)",
+      zIndex: 10001,
+      fontSize: isTinyViewport ? "16px" : (isMobileViewport ? "18px" : "20px"),
+      transition: "all 0.3s ease",
+    },
+    botContainer: {
+      position: "fixed",
+      bottom: isTinyViewport ? "124px" : (isMobileViewport ? "132px" : "145px"),
+      right: isTinyViewport ? "8px" : (isMobileViewport ? "12px" : "20px"),
+      width: isTinyViewport ? "calc(100vw - 16px)" : (isMobileViewport ? "calc(100vw - 24px)" : "350px"),
+      maxWidth: isMobileViewport ? "420px" : "350px",
+      height: isTinyViewport ? "min(62vh, 500px)" : (isMobileViewport ? "min(66vh, 520px)" : "500px"),
+      zIndex: 10001,
+      boxShadow: "0 0 30px rgba(0,0,0,0.5)",
+    },
   };
 
   // Activity tracking
@@ -225,6 +306,46 @@ export default function App() {
     return () => unsubProfile();
   }, [user?.uid]);
 
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    let canceled = false;
+
+    const syncSubscriptionStatus = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/stripe/subscription", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok || canceled) return;
+
+        const data = await res.json();
+        if (canceled) return;
+
+        const isActive = Boolean(
+          data?.subscription &&
+          (data.subscription.status === "active" || data.subscription.status === "trialing")
+        );
+
+        setUserProfile((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            subscriptionStatus: isActive ? "active" : "inactive",
+            subscriptionId: data?.subscription?.id || prev.subscriptionId,
+          };
+        });
+      } catch (error) {
+        console.error("Subscription sync failed:", error);
+      }
+    };
+
+    syncSubscriptionStatus();
+  }, [user?.uid, location.pathname, location.search]);
+
   const handleOnboardingComplete = () => {
     setShowOnboarding(false);
     setOnboardingComplete(true);
@@ -323,24 +444,16 @@ export default function App() {
       )}
 
       {user && (
-        <Navbar user={user} userProfile={userProfile} theme={theme} cycleTheme={cycleTheme} />
+        <Navbar user={user} userProfile={userProfile} themeMode={themeMode} toggleThemeMode={toggleThemeMode} />
       )}
 
       {/* Theme toggle only on login route */}
       {!user && location.pathname === "/login" && (
-        <button
-          onClick={cycleTheme}
-          className="theme-toggle-btn"
-          style={{
-            position: "fixed",
-            top: "10rem",
-            right: "1.5rem",
-            zIndex: 10002,
-          }}
-          title="Cycle Themes"
-        >
-          {theme === "red-black" ? "🔴" : theme === "white-black" ? "⚪" : "⚫"}
-        </button>
+        <ThemeToggle
+          mode={themeMode}
+          onToggle={toggleThemeMode}
+          className="theme-toggle-login"
+        />
       )}
 
       {/* Bot trigger only when logged in */}
@@ -527,35 +640,3 @@ export default function App() {
     </BackgroundShell>
   );
 }
-
-const botStyles = {
-  botTrigger: {
-    position: "fixed",
-    bottom: "85px",
-    right: "20px",
-    background: "var(--accent-color, #FF0000)",
-    color: "#FFF",
-    border: "none",
-    borderRadius: "50%",
-    width: "50px",
-    height: "50px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: "bold",
-    cursor: "pointer",
-    boxShadow: "0 0 15px var(--accent-color, #FF0000)",
-    zIndex: 10001,
-    fontSize: "20px",
-    transition: "all 0.3s ease",
-  },
-  botContainer: {
-    position: "fixed",
-    bottom: "145px",
-    right: "20px",
-    width: "350px",
-    height: "500px",
-    zIndex: 10001,
-    boxShadow: "0 0 30px rgba(0,0,0,0.5)",
-  },
-};

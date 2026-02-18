@@ -1,0 +1,42 @@
+    rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read/write their own user profile
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      // Allow writing own user profile, or any bot profile (userId starts with 'bot_')
+      allow write: if request.auth != null && (request.auth.uid == userId || userId.matches('^bot_.*'));
+    }
+
+    // Allow authenticated users to read/write global chat messages
+    match /globalChat/{messageId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // Allow authenticated users to read/write direct messages
+    match /directMessages/{messageId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Allow authenticated users to read leaderboard data
+    match /leaderboard/{entryId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Restrict lobbies to only allow users to update their own player data
+    match /lobbies/{lobbyId}/players/{userId} {
+      allow read: if request.auth != null;
+      // Allow writing own player data, or any bot player (userId starts with 'bot_')
+      allow write: if request.auth != null && (request.auth.uid == userId || userId.matches('^bot_.*'));
+    }
+
+    // Restrict liveRooms to only allow authenticated users
+    match /liveRooms/{roomId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

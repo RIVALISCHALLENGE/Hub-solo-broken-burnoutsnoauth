@@ -5,7 +5,15 @@ import { db } from "../../firebase";
 import { shuffleDeck, updateUserStats, finalizeSession } from "../../logic/burnoutsHelpers";
 import { processExercise, createStateRefs, resetStateRefs } from "../../logic/exerciseEngine";
 import PoseVisualizer from "./PoseVisualizer";
+import {
+    announceRepProgress,
+    maybeSpeakMotivation,
+    primeVoiceCoach,
+    speakCoach,
+    DEFAULT_VOICE_MODEL,
+} from "../../logic/voiceCoach.js";
 
+<<<<<<< HEAD
 // Enhanced speak function: picks best available voice
 function speak(text) {
     if (!('speechSynthesis' in window)) return;
@@ -41,6 +49,9 @@ function speak(text) {
 export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
     const [showShare, setShowShare] = useState(false);
     const [lastStats, setLastStats] = useState(null);
+=======
+export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd, voiceModel = DEFAULT_VOICE_MODEL }) {
+>>>>>>> fd3c5c77fd87dbbad7751416d155ae74eae282b0
     const [deck, setDeck] = useState(shuffleDeck(muscleGroup));
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [totalReps, setTotalReps] = useState(0);
@@ -56,6 +67,10 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
 
     const stateRefs = useRef(createStateRefs());
     const currentCard = deck[currentCardIndex];
+
+    useEffect(() => {
+        primeVoiceCoach();
+    }, []);
 
     useEffect(() => {
         const fetchAvatar = async () => {
@@ -80,11 +95,16 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
     useEffect(() => {
         if (deck.length > 0 && sessionActive && cooldown === 0) {
             if (lastAnnouncedCardIndex.current !== currentCardIndex) {
-                speak(`Start with ${deck[currentCardIndex].exercise}, ${deck[currentCardIndex].reps} reps.`);
+                if (!isMuted) {
+                    speakCoach(`Start with ${deck[currentCardIndex].exercise}. ${deck[currentCardIndex].reps} reps.`, {
+                        voiceModel,
+                        interrupt: true,
+                    });
+                }
                 lastAnnouncedCardIndex.current = currentCardIndex;
             }
         }
-    }, [currentCardIndex, cooldown, sessionActive, deck]);
+    }, [currentCardIndex, cooldown, sessionActive, deck, isMuted, voiceModel]);
 
     useEffect(() => {
         let timer;
@@ -97,14 +117,14 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
                     }
                     const next = prev - 1;
                     if (next <= 5 && !isMuted) {
-                        speak(next.toString());
+                        speakCoach(next.toString(), { voiceModel });
                     }
                     return next;
                 });
             }, 1000);
         }
         return () => clearInterval(timer);
-    }, [cooldown]);
+    }, [cooldown, isMuted, voiceModel]);
 
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -119,7 +139,12 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
 
     const completeCard = useCallback(() => {
         setFeedback("TARGET REACHED! 💪");
-        if (!isMuted) speak("Target reached. 15 second cooldown starting.");
+        if (!isMuted) {
+            speakCoach("Target reached. 15 second cooldown starting.", {
+                voiceModel,
+                interrupt: true,
+            });
+        }
         setTimeout(() => {
             setCurrentCardIndex(prevIndex => {
                 const nextIndex = prevIndex + 1;
@@ -136,17 +161,19 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
                     setLastStats({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
                     setShowShare(true);
                     if (onSessionEnd) {
-                        onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
+                        onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup, type: 'rep' });
                     }
                     return prevIndex;
                 }
             });
         }, 1500);
-    }, [deck, isMuted, userId, totalReps, ticketsEarned, muscleGroup, onSessionEnd, timeElapsed]);
+    }, [deck, isMuted, userId, totalReps, ticketsEarned, muscleGroup, onSessionEnd, timeElapsed, voiceModel]);
 
     const handleRep = useCallback((inc) => {
+        const previousWholeReps = Math.floor(currentReps);
         const next = currentReps + inc;
         const target = currentCard.reps;
+        const clampedNext = Math.min(next, target);
         if (next >= target) {
             setCurrentReps(target);
             completeCard();
@@ -162,10 +189,16 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
             updateUserStats(userId, newTotalReps, newTickets, muscleGroup);
         }
 
-        if (Math.floor(next) > Math.floor(currentReps) && !isMuted) {
-            speak(Math.floor(next).toString());
+        if (!isMuted) {
+            announceRepProgress(previousWholeReps, clampedNext, { voiceModel });
+            maybeSpeakMotivation(newTotalReps, {
+                voiceModel,
+                channel: `burnouts-${muscleGroup || 'all'}`,
+                exerciseName: currentCard?.exercise,
+                repsRemaining: Math.max(0, target - Math.floor(clampedNext)),
+            });
         }
-    }, [currentReps, currentCard, totalReps, ticketsEarned, isMuted, userId, muscleGroup, completeCard]);
+    }, [currentReps, currentCard, totalReps, ticketsEarned, isMuted, userId, muscleGroup, completeCard, voiceModel]);
 
     const processPose = useCallback((landmarks) => {
         if (!currentCard || !sessionActive || cooldown > 0 || !landmarks) return;
@@ -186,7 +219,7 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
         setLastStats({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
         setShowShare(true);
         if (onSessionEnd) {
-            onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
+            onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup, type: 'rep' });
         }
     }, [userId, totalReps, ticketsEarned, muscleGroup, onSessionEnd, timeElapsed]);
 
@@ -260,7 +293,7 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
                 </div>
 
                 <div className="burnouts-controls">
-                    <button className="burnouts-primary-btn" onClick={handleStopSession}>STOP SESSION</button>
+                    <button className="burnouts-primary-btn" onClick={handleStopSession}>END SESSION</button>
                 </div>
 
                 {sessionActive && currentCard && (
