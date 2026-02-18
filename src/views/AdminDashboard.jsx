@@ -1,3 +1,29 @@
+// Bulk moderation state and helpers
+const [selectedUserIds, setSelectedUserIds] = useState([]);
+const allSelected = filteredUsers.length > 0 && filteredUsers.every(u => selectedUserIds.includes(u.id));
+const toggleSelectAll = () => {
+  if (allSelected) setSelectedUserIds([]);
+  else setSelectedUserIds(filteredUsers.map(u => u.id));
+};
+const toggleSelectUser = (id) => {
+  setSelectedUserIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
+};
+const bulkBan = () => {
+  selectedUserIds.forEach(id => handleUserAction(id, "ban", true));
+  setSelectedUserIds([]);
+};
+const bulkUnban = () => {
+  selectedUserIds.forEach(id => handleUserAction(id, "ban", false));
+  setSelectedUserIds([]);
+};
+const bulkMute = () => {
+  selectedUserIds.forEach(id => handleUserAction(id, "mute", true));
+  setSelectedUserIds([]);
+};
+const bulkUnmute = () => {
+  selectedUserIds.forEach(id => handleUserAction(id, "mute", false));
+  setSelectedUserIds([]);
+};
 import React, { useState, useEffect } from "react";
 import { db, auth } from "../firebase";
 import { collection, doc, onSnapshot, query, orderBy, limit } from "firebase/firestore";
@@ -246,6 +272,197 @@ const AdminDashboard = ({ userProfile }) => {
           </div>
         </div>
 
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-black to-zinc-900 text-white font-sans flex">
+      {/* Sidebar */}
+      <aside className="w-64 min-h-screen bg-zinc-900 border-r border-zinc-800 flex flex-col py-8 px-4 shadow-2xl z-10">
+        <div className="mb-10 flex flex-col items-center">
+          <h1 className="text-3xl font-black text-red-600 tracking-tighter uppercase italic mb-2">Admin</h1>
+          <span className="text-xs text-zinc-500 font-mono uppercase tracking-widest">Command Console</span>
+        </div>
+        <nav className="flex flex-col gap-2 mt-4">
+          {[
+            { key: "users", label: "Arena Roster", icon: "👥" },
+            { key: "chat", label: "Comms Log", icon: "💬" },
+            { key: "logs", label: "System Core", icon: "🖥️" },
+            { key: "live", label: "Live Rules", icon: "⚡" },
+            { key: "games", label: "Live Games", icon: "🎮" },
+            { key: "analytics", label: "Analytics", icon: "📊" },
+            { key: "raffle", label: "Raffle Protocol", icon: "🎟️" },
+            { key: "alerts", label: "Tactical Alerts", icon: "🚨" }
+          // --- Analytics & Insights Tab ---
+          import { useRef } from "react";
+          import { Chart, Bar, Line } from "react-chartjs-2";
+          import {
+            CategoryScale,
+            LinearScale,
+            BarElement,
+            PointElement,
+            LineElement,
+            Title,
+            Tooltip,
+            Legend
+          } from "chart.js";
+          Chart.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend);
+
+          function AnalyticsTab() {
+            const [userStats, setUserStats] = useState({ dates: [], counts: [] });
+            const [flaggedStats, setFlaggedStats] = useState({ dates: [], counts: [] });
+            const chartRef = useRef();
+
+            useEffect(() => {
+              // Fetch user growth data (example: users created per day)
+              (async () => {
+                // Replace with your Firestore query for real data
+                const fakeDates = Array.from({ length: 14 }, (_, i) => {
+                  const d = new Date(); d.setDate(d.getDate() - (13 - i));
+                  return d.toLocaleDateString();
+                });
+                setUserStats({ dates: fakeDates, counts: fakeDates.map(() => Math.floor(Math.random() * 10 + 5)) });
+                setFlaggedStats({ dates: fakeDates, counts: fakeDates.map(() => Math.floor(Math.random() * 3)) });
+              })();
+            }, []);
+
+            return (
+              <div className="bg-zinc-900/30 p-6 rounded-2xl border border-zinc-800/50 max-h-[75vh] overflow-y-auto custom-scrollbar backdrop-blur-xl animate-in fade-in zoom-in-95 duration-300">
+                <h2 className="text-red-600 text-[10px] font-black tracking-[0.2em] mb-6 px-2 uppercase border-l-2 border-red-600 pl-4">Analytics & Insights</h2>
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div>
+                    <div className="font-bold mb-2 text-zinc-300">User Growth (Last 2 Weeks)</div>
+                    <Bar
+                      ref={chartRef}
+                      data={{
+                        labels: userStats.dates,
+                        datasets: [
+                          {
+                            label: "New Users",
+                            data: userStats.counts,
+                            backgroundColor: "#ef4444",
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { grid: { color: "#222" } }, y: { grid: { color: "#222" } } },
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div className="font-bold mb-2 text-zinc-300">Flagged Content (Last 2 Weeks)</div>
+                    <Line
+                      data={{
+                        labels: flaggedStats.dates,
+                        datasets: [
+                          {
+                            label: "Flagged Messages",
+                            data: flaggedStats.counts,
+                            borderColor: "#f59e42",
+                            backgroundColor: "#f59e4280",
+                            tension: 0.3,
+                            fill: true,
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { grid: { color: "#222" } }, y: { grid: { color: "#222" } } },
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          }
+                  {activeTab === "analytics" && (
+                    <AnalyticsTab />
+                  )}
+          // --- Live Game Monitoring Tab ---
+          import { useEffect, useState } from "react";
+          import { db } from "../firebase";
+          import { collection, query, where, onSnapshot } from "firebase/firestore";
+
+                  {activeTab === "games" && (
+                    <LiveGamesMonitor />
+                  )}
+
+          // --- LiveGamesMonitor component ---
+          function LiveGamesMonitor() {
+            const [rooms, setRooms] = useState([]);
+            useEffect(() => {
+              const q = query(collection(db, "liveRooms"), where("status", "in", ["waiting", "playing"]));
+              const unsub = onSnapshot(q, (snap) => {
+                setRooms(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+              });
+              return () => unsub();
+            }, []);
+            return (
+              <div className="bg-zinc-900/30 p-6 rounded-2xl border border-zinc-800/50 max-h-[75vh] overflow-y-auto custom-scrollbar backdrop-blur-xl animate-in fade-in zoom-in-95 duration-300">
+                <h2 className="text-red-600 text-[10px] font-black tracking-[0.2em] mb-6 px-2 uppercase border-l-2 border-red-600 pl-4">Active Live Games</h2>
+                <div className="space-y-4">
+                  {rooms.length === 0 && <div className="text-center py-20 text-zinc-700 font-mono italic uppercase tracking-widest">No active games.</div>}
+                  {rooms.map(room => (
+                    <div key={room.id} className="bg-black/50 p-5 rounded-2xl border border-zinc-800/50 flex flex-col md:flex-row md:items-center md:justify-between group hover:border-red-600/50 transition-all">
+                      <div>
+                        <div className="font-black text-lg text-red-500 uppercase tracking-tight">{room.roomName || room.id}</div>
+                        <div className="text-xs text-zinc-400 mb-2">Host: {room.hostName} ({room.hostId})</div>
+                        <div className="text-xs text-zinc-400 mb-2">Status: <span className="font-bold text-white">{room.status}</span> | Mode: {room.trickMode}</div>
+                        <div className="text-xs text-zinc-400 mb-2">Created: {room.createdAt?.toDate ? room.createdAt.toDate().toLocaleString() : "-"}</div>
+                        <div className="text-xs text-zinc-400 mb-2">Players: {room.players?.length || 0} / {room.maxPlayers || 6}</div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {room.players?.map(p => (
+                            <span key={p.userId} className="bg-zinc-800 text-zinc-200 px-3 py-1 rounded-full text-xs font-mono">{p.userName} ({p.userId})</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-4 md:mt-0 flex flex-col gap-2 items-end">
+                        <span className="text-xs text-zinc-500">Room ID: {room.id}</span>
+                        {/* Future: Add admin controls for force-end, observe, etc. */}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all border-l-4 ${activeTab === tab.key ? "bg-red-600/90 text-white border-red-600 shadow-lg" : "bg-zinc-900 text-zinc-400 border-transparent hover:bg-zinc-800 hover:text-zinc-200"}`}
+            >
+              <span className="text-lg">{tab.icon}</span> {tab.label}
+            </button>
+          ))}
+        </nav>
+        <div className="mt-auto pt-10 text-center text-zinc-700 text-xs font-mono opacity-60">
+          <div className="mb-2">System Link: <span className="text-green-400">{user?.email || "EXTERNAL"}</span></div>
+          <div>© {new Date().getFullYear()} Rivalis Admin</div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 p-8 overflow-y-auto">
+        {/* Dashboard Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
+          <div className="bg-zinc-900 border-l-4 border-red-600 rounded-xl p-6 shadow-lg flex flex-col items-start">
+            <span className="text-xs text-zinc-400 uppercase mb-2">Total Users</span>
+            <span className="text-3xl font-black text-red-500">{globalStats.totalUsers}</span>
+          </div>
+          <div className="bg-zinc-900 border-l-4 border-red-600 rounded-xl p-6 shadow-lg flex flex-col items-start">
+            <span className="text-xs text-zinc-400 uppercase mb-2">Total Reps</span>
+            <span className="text-3xl font-black text-red-500">{globalStats.totalReps}</span>
+          </div>
+          <div className="bg-zinc-900 border-l-4 border-red-600 rounded-xl p-6 shadow-lg flex flex-col items-start">
+            <span className="text-xs text-zinc-400 uppercase mb-2">Total Miles</span>
+            <span className="text-3xl font-black text-red-500">{globalStats.totalMiles.toFixed(1)}</span>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {/* ...existing code... */}
+      </main>
+
         {activeTab === "live" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-zinc-900/40 p-10 rounded-3xl border border-zinc-800/60 backdrop-blur-xl">
@@ -327,7 +544,8 @@ const AdminDashboard = ({ userProfile }) => {
         {activeTab === "alerts" && (
           <div className="bg-zinc-900/30 p-6 rounded-2xl border border-zinc-800/50 max-h-[75vh] overflow-y-auto custom-scrollbar backdrop-blur-xl animate-in fade-in zoom-in-95 duration-300">
             <h2 className="text-red-600 text-[10px] font-black tracking-[0.2em] mb-6 px-2 uppercase border-l-2 border-red-600 pl-4">Tactical Alerts & Escalations</h2>
-            <div className="space-y-3">
+            <ModerationRulesPanel />
+            <div className="space-y-3 mt-8">
               {notifications.map(n => (
                 <div key={n.id} className={`p-5 rounded-xl border flex justify-between items-center transition-all ${n.status === 'pending' ? 'bg-red-950/20 border-red-600/50' : 'bg-zinc-900/40 border-zinc-800'}`}>
                   <div>
@@ -354,17 +572,97 @@ const AdminDashboard = ({ userProfile }) => {
             </div>
           </div>
         )}
+// --- ModerationRulesPanel component ---
+function ModerationRulesPanel() {
+  const [rules, setRules] = useState(["badword1", "badword2"]); // Replace with Firestore fetch in production
+  const [newRule, setNewRule] = useState("");
+  const addRule = () => {
+    if (newRule && !rules.includes(newRule)) setRules([...rules, newRule]);
+    setNewRule("");
+  };
+  const removeRule = (r) => setRules(rules.filter(x => x !== r));
+  return (
+    <div className="mb-6 p-4 bg-zinc-800 rounded-xl border border-zinc-700">
+      <div className="font-bold text-zinc-300 mb-2">Moderation Rules (Flagged Words/Phrases)</div>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {rules.map(r => (
+          <span key={r} className="bg-red-600 text-white px-3 py-1 rounded-full text-xs font-mono flex items-center gap-2">
+            {r}
+            <button onClick={() => removeRule(r)} className="ml-1 text-xs text-white hover:text-black">×</button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newRule}
+          onChange={e => setNewRule(e.target.value)}
+          placeholder="Add new word/phrase..."
+          className="bg-zinc-900 border border-zinc-700 rounded px-3 py-1 text-xs text-white font-mono"
+        />
+        <button onClick={addRule} className="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold">Add</button>
+      </div>
+      <div className="text-xs text-zinc-400 mt-2">(Changes take effect immediately for new messages. For demo: rules are local, connect to Firestore for production.)</div>
+    </div>
+  );
+}
 
         {activeTab === "users" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex justify-between items-center mb-4 px-2 text-zinc-500 text-[10px] font-mono tracking-widest uppercase">
-              <span>Warrior Registry / Status</span>
-              <span>Tactical Moderation</span>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4 px-2">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or ID..."
+                  className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs text-white font-mono"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                />
+                <select
+                  className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs text-white font-mono"
+                  value={userRoleFilter}
+                  onChange={e => setUserRoleFilter(e.target.value)}
+                >
+                  <option value="">All Roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="user">User</option>
+                </select>
+                <select
+                  className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs text-white font-mono"
+                  value={userBanFilter}
+                  onChange={e => setUserBanFilter(e.target.value)}
+                >
+                  <option value="">All Status</option>
+                  <option value="banned">Banned</option>
+                  <option value="muted">Muted</option>
+                  <option value="active">Active</option>
+                </select>
+                <select
+                  className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs text-white font-mono"
+                  value={userLiveFilter}
+                  onChange={e => setUserLiveFilter(e.target.value)}
+                >
+                  <option value="">All Activity</option>
+                  <option value="live">Live</option>
+                  <option value="idle">Idle</option>
+                </select>
+              </div>
+              <span className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest">Warrior Registry / Status</span>
+            </div>
+            <div className="flex items-center gap-4 mb-2">
+              <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-4 h-4" />
+              <span className="text-xs text-zinc-400">Select All</span>
+              <button onClick={bulkBan} disabled={selectedUserIds.length === 0} className="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold disabled:opacity-40">Ban</button>
+              <button onClick={bulkUnban} disabled={selectedUserIds.length === 0} className="bg-zinc-800 text-red-600 px-3 py-1 rounded text-xs font-bold border border-red-600 disabled:opacity-40">Unban</button>
+              <button onClick={bulkMute} disabled={selectedUserIds.length === 0} className="bg-yellow-500 text-black px-3 py-1 rounded text-xs font-bold disabled:opacity-40">Mute</button>
+              <button onClick={bulkUnmute} disabled={selectedUserIds.length === 0} className="bg-zinc-800 text-yellow-500 px-3 py-1 rounded text-xs font-bold border border-yellow-500 disabled:opacity-40">Unmute</button>
+              <span className="text-xs text-zinc-400">{selectedUserIds.length} selected</span>
             </div>
             <div className="grid gap-3">
-              {users.map(u => (
+              {filteredUsers.map(u => (
                 <div key={u.id} className="bg-zinc-900/40 p-5 rounded-xl border border-zinc-800/60 flex justify-between items-center backdrop-blur-md transition-all hover:border-red-900/30 hover:bg-zinc-900/60">
-                  <div className="flex items-center gap-5">
+                  <input type="checkbox" checked={selectedUserIds.includes(u.id)} onChange={() => toggleSelectUser(u.id)} className="w-4 h-4 mr-4" />
+                  <div className="flex items-center gap-5 flex-1">
                     <div className="relative">
                       {u.avatarURL ? (
                         <img 
@@ -404,13 +702,127 @@ const AdminDashboard = ({ userProfile }) => {
                     <button onClick={() => handleUserAction(u.id, "mute", !u.isMuted)} className={`text-[9px] px-4 py-2 rounded font-black transition-all border uppercase tracking-widest ${u.isMuted ? "bg-yellow-600 text-black border-yellow-600 shadow-lg" : "bg-transparent text-yellow-600 border-yellow-900/30 hover:bg-yellow-900/10"}`}>
                       {u.isMuted ? "Unsilence" : "Silence"}
                     </button>
+                    <button onClick={() => setImpersonateUser(u)} className="text-[9px] px-4 py-2 rounded font-black border bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 transition-all uppercase tracking-widest">Preview</button>
                   </div>
+                // --- User impersonation/preview modal ---
+                import Modal from "react-modal";
+                const [impersonateUser, setImpersonateUser] = useState(null);
+                Modal.setAppElement("body");
+
+                <Modal
+                  isOpen={!!impersonateUser}
+                  onRequestClose={() => setImpersonateUser(null)}
+                  className="fixed inset-0 flex items-center justify-center z-50"
+                  overlayClassName="fixed inset-0 bg-black/80 z-40"
+                >
+                  <div className="bg-zinc-900 rounded-2xl p-8 max-w-2xl w-full shadow-2xl border border-zinc-800 relative">
+                    <button onClick={() => setImpersonateUser(null)} className="absolute top-4 right-4 text-zinc-500 hover:text-red-500 text-xl font-black">×</button>
+                    <h2 className="text-red-600 text-xl font-black mb-4">Preview: {impersonateUser?.nickname || impersonateUser?.email || impersonateUser?.id}</h2>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      {/* Render a read-only summary of the user's profile */}
+                      <div className="flex gap-6 items-center mb-6">
+                        {impersonateUser?.avatarURL ? (
+                          <img src={impersonateUser.avatarURL} alt="avatar" className="w-20 h-20 rounded-full border-2 border-red-600 object-cover" />
+                        ) : (
+                          <div className="w-20 h-20 rounded-full bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-zinc-600 text-lg">NO AV</div>
+                        )}
+                        <div>
+                          <div className="font-black text-lg">{impersonateUser?.nickname || "Anonymous"}</div>
+                          <div className="text-xs text-zinc-400">{impersonateUser?.email}</div>
+                          <div className="text-xs text-zinc-400">ID: {impersonateUser?.id}</div>
+                          <div className="text-xs text-zinc-400">Role: {impersonateUser?.role}</div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <span className="text-zinc-500 text-xs">Age</span>
+                          <div className="font-bold">{impersonateUser?.age || "-"}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500 text-xs">Gender</span>
+                          <div className="font-bold">{impersonateUser?.gender || "-"}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500 text-xs">Height</span>
+                          <div className="font-bold">{(impersonateUser?.heightFeet || "-") + "' " + (impersonateUser?.heightInches || "-") + '"'}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500 text-xs">Weight</span>
+                          <div className="font-bold">{impersonateUser?.weight || "-"}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500 text-xs">Fitness Level</span>
+                          <div className="font-bold">{impersonateUser?.fitnessLevel || "-"}</div>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500 text-xs">Days/Week</span>
+                          <div className="font-bold">{impersonateUser?.workoutFrequency || "-"}</div>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-zinc-500 text-xs">Injuries / Limitations</span>
+                          <div className="font-bold">{impersonateUser?.injuries || "-"}</div>
+                        </div>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-zinc-500 text-xs">Bio</span>
+                        <div className="font-mono text-sm text-zinc-300 bg-zinc-800 rounded p-2 mt-1">{impersonateUser?.bio || "No bio."}</div>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-zinc-500 text-xs">Current Activity</span>
+                        <div className="font-bold">{impersonateUser?.currentActivity || "Idle"}</div>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-zinc-500 text-xs">Total Reps</span>
+                        <div className="font-bold">{impersonateUser?.totalReps || 0}</div>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-zinc-500 text-xs">Total Miles</span>
+                        <div className="font-bold">{impersonateUser?.totalMiles?.toFixed(1) || 0}</div>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-zinc-500 text-xs">Ticket Balance</span>
+                        <div className="font-bold">{impersonateUser?.ticketBalance || 0}</div>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-zinc-500 text-xs">Fitness Goals</span>
+                        <div className="font-mono text-xs text-zinc-300 bg-zinc-800 rounded p-2 mt-1">{(impersonateUser?.fitnessGoals || []).join(", ") || "-"}</div>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-zinc-500 text-xs">Seeking</span>
+                        <div className="font-mono text-xs text-zinc-300 bg-zinc-800 rounded p-2 mt-1">{(impersonateUser?.appSeeking || []).join(", ") || "-"}</div>
+                      </div>
+                    </div>
+                  </div>
+                </Modal>
                 </div>
               ))}
-              {users.length === 0 && <div className="text-center py-20 text-zinc-700 font-mono italic uppercase tracking-widest animate-pulse">Scanning Arena for Warriors...</div>}
+              {filteredUsers.length === 0 && <div className="text-center py-20 text-zinc-700 font-mono italic uppercase tracking-widest animate-pulse">No users found.</div>}
             </div>
           </div>
         )}
+// --- User search/filter state and logic ---
+import { useMemo } from "react";
+const [userSearch, setUserSearch] = useState("");
+const [userRoleFilter, setUserRoleFilter] = useState("");
+const [userBanFilter, setUserBanFilter] = useState("");
+const [userLiveFilter, setUserLiveFilter] = useState("");
+const filteredUsers = useMemo(() => {
+  return users.filter(u => {
+    const search = userSearch.toLowerCase();
+    if (search && !(
+      (u.nickname || "").toLowerCase().includes(search) ||
+      (u.email || "").toLowerCase().includes(search) ||
+      (u.id || "").toLowerCase().includes(search)
+    )) return false;
+    if (userRoleFilter && u.role !== userRoleFilter) return false;
+    if (userBanFilter === "banned" && !u.isBanned) return false;
+    if (userBanFilter === "muted" && !u.isMuted) return false;
+    if (userBanFilter === "active" && (u.isBanned || u.isMuted)) return false;
+    if (userLiveFilter === "live" && !isUserLive(u)) return false;
+    if (userLiveFilter === "idle" && isUserLive(u)) return false;
+    return true;
+  });
+}, [users, userSearch, userRoleFilter, userBanFilter, userLiveFilter]);
 
         {activeTab === "chat" && (
           <div className="bg-zinc-900/30 p-6 rounded-2xl border border-zinc-800/50 max-h-[75vh] overflow-y-auto custom-scrollbar backdrop-blur-xl animate-in fade-in zoom-in-95 duration-300">

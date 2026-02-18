@@ -1,16 +1,46 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import SocialShareModal from "../SocialShareModal";
 import { getDoc, doc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { shuffleDeck, updateUserStats, finalizeSession } from "../../logic/burnoutsHelpers";
 import { processExercise, createStateRefs, resetStateRefs } from "../../logic/exerciseEngine";
 import PoseVisualizer from "./PoseVisualizer";
 
+// Enhanced speak function: picks best available voice
 function speak(text) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    window.speechSynthesis.speak(utterance);
+    if (!('speechSynthesis' in window)) return;
+    const utterance = new window.SpeechSynthesisUtterance(text);
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = [
+        /Google US English/i,
+        /Google UK English/i,
+        /Microsoft Aria Online/i,
+        /Microsoft Jenny/i,
+        /Microsoft Guy/i,
+        /Apple Siri/i,
+        /en-US/i
+    ];
+    let best = null;
+    for (const pattern of preferred) {
+        best = voices.find(v => pattern.test(v.name));
+        if (best) break;
+    }
+    if (!best) best = voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0] || null;
+    if (best) utterance.voice = best;
+    if (voices.length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.speak(utterance);
+        window.speechSynthesis.getVoices();
+    } else {
+        window.speechSynthesis.speak(utterance);
+    }
 }
 
 export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
+    const [showShare, setShowShare] = useState(false);
+    const [lastStats, setLastStats] = useState(null);
     const [deck, setDeck] = useState(shuffleDeck(muscleGroup));
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [totalReps, setTotalReps] = useState(0);
@@ -97,12 +127,14 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
                     setCooldown(15);
                     setCurrentReps(0);
                     resetStateRefs(stateRefs.current);
-                    setFeedback(`Get Ready: 15s`);
+                    setFeedback(`Rest: 15s`);
                     setMovementState('IDLE');
                     return nextIndex;
                 } else {
                     setSessionActive(false);
                     finalizeSession(userId, totalReps, ticketsEarned, muscleGroup);
+                    setLastStats({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
+                    setShowShare(true);
                     if (onSessionEnd) {
                         onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
                     }
@@ -151,12 +183,36 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
     const handleStopSession = useCallback(() => {
         setSessionActive(false);
         finalizeSession(userId, totalReps, ticketsEarned, muscleGroup);
+        setLastStats({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
+        setShowShare(true);
         if (onSessionEnd) {
             onSessionEnd({ reps: totalReps, duration: timeElapsed, category: muscleGroup });
         }
     }, [userId, totalReps, ticketsEarned, muscleGroup, onSessionEnd, timeElapsed]);
 
+    const handleShare = async () => {
+        setShowShare(false);
+        // Simulate social share and award tickets
+        try {
+            await fetch("/api/raffle/award", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, amount: 100, reason: "Social Share Bonus" })
+            });
+            alert("Shared! +100 raffle tickets awarded.");
+        } catch (e) {
+            alert("Shared! (Demo: 100 tickets awarded)");
+        }
+        window.location.href = "/dashboard";
+    };
+
+    const handleCloseShare = () => {
+        setShowShare(false);
+        window.location.href = "/dashboard";
+    };
+
     return (
+        <>
         <div className="burnouts-container">
             <div className="ui-layer">
                 <div className="top-bar">
@@ -239,5 +295,13 @@ export default function BurnoutsSession({ userId, muscleGroup, onSessionEnd }) {
                 )}
             </div>
         </div>
+        <SocialShareModal
+            open={showShare}
+            onClose={handleCloseShare}
+            onShare={handleShare}
+            sessionStats={lastStats || { reps: 0, duration: 0, category: "-" }}
+            userProfile={{ nickname: "User" }}
+        />
+        </>
     );
 }

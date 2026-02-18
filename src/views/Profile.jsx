@@ -667,12 +667,47 @@ export default function Profile({ user, userProfile }) {
                   {bio || "No bio yet. Click Edit to add one!"}
                 </p>
 
-                {userProfile?.age && (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginBottom: "1rem", background: t.shadowXxs, padding: "6px 12px", borderRadius: "8px", border: `1px solid ${t.shadowXs}` }}>
-                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>AGE</span>
-                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{userProfile.age}</span>
+
+                {/* Always show all identity fields, never collapsed */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "0.75rem",
+                  marginBottom: "1.5rem",
+                  background: t.shadowXxs,
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: `1px solid ${t.shadowXs}`
+                }}>
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>AGE</span><br />
+                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{userProfile?.age || "-"}</span>
                   </div>
-                )}
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>GENDER</span><br />
+                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{userProfile?.gender || "-"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>HEIGHT</span><br />
+                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{(userProfile?.heightFeet || "-") + "' " + (userProfile?.heightInches || "-") + '"'}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>WEIGHT (LBS)</span><br />
+                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{userProfile?.weight || "-"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>FITNESS LEVEL</span><br />
+                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{userProfile?.fitnessLevel || "-"}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>DAYS/WEEK</span><br />
+                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{userProfile?.workoutFrequency || "-"}</span>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.6rem", letterSpacing: "1px" }}>INJURIES / LIMITATIONS</span><br />
+                    <span style={{ color: "#fff", fontSize: "1rem", fontWeight: "bold" }}>{userProfile?.injuries || "-"}</span>
+                  </div>
+                </div>
 
                 {fitnessGoals.length > 0 && (
                   <div style={{ marginBottom: "1rem" }}>

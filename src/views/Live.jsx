@@ -950,12 +950,45 @@ export default function Live({ user, userProfile }) {
   );
 }
 
+import LiveSocialShareModal, { animateAndShareRivalisVS } from "./LiveSocialShareModal";
+
 function ResultsScreen({ roomData, user, t, onPlayAgain, onQuit, matchTime, formatTime }) {
   const sortedPlayers = [...(roomData.players || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
   const winner = sortedPlayers[0];
   const me = sortedPlayers.find((p) => p.userId === user.uid);
   const myRank = sortedPlayers.findIndex((p) => p.userId === user.uid) + 1;
   const isWinner = winner?.userId === user.uid;
+  const [showShare, setShowShare] = React.useState(false);
+  const [shared, setShared] = React.useState(false);
+
+  // Prepare VS results for animation
+  const vsResults = React.useMemo(() => ({
+    players: sortedPlayers.map(p => ({
+      username: p.userName || "Player",
+      reps: p.totalReps || 0
+    })),
+    mode: roomData.showdown?.name || "Live"
+  }), [sortedPlayers, roomData]);
+
+  const handleShare = async () => {
+    setShowShare(false);
+    const shared = await animateAndShareRivalisVS(vsResults);
+    if (shared) {
+      setShared(true);
+      try {
+        await fetch("/api/raffle/award", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.uid, amount: 100, reason: "Live Mode Social Share Bonus" })
+        });
+        alert("Shared! +100 raffle tickets awarded.");
+      } catch (e) {
+        alert("Shared! (Demo: 100 tickets awarded)");
+      }
+    } else {
+      alert("Share cancelled. No tickets awarded.");
+    }
+  };
 
   return (
     <div style={{
@@ -1020,6 +1053,57 @@ function ResultsScreen({ roomData, user, t, onPlayAgain, onQuit, matchTime, form
           </div>
         ))}
       </div>
+
+      {me && (
+        <>
+        <div style={{
+          width: "100%", maxWidth: "500px", padding: "20px",
+          background: "rgba(255,255,255,0.03)", borderRadius: "16px",
+          border: "1px solid rgba(255,255,255,0.06)", marginBottom: "32px"
+        }}>
+          <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", fontFamily: "'Press Start 2P', cursive", marginBottom: "12px" }}>YOUR STATS</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", textAlign: "center" }}>
+            {[
+              { label: "RANK", value: `#${myRank}", color: myRank === 1 ? "#FFD700" : "#fff" },
+              { label: "SCORE", value: me.score || 0, color: t.accent },
+              { label: "REPS", value: me.totalReps || 0, color: "#0f0" },
+              { label: "TICKETS", value: `🎟️ ${me.ticketsEarned || 0}", color: "#FFD700" },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <div style={{ fontFamily: "'Press Start 2P', cursive", fontSize: "16px", color: stat.color, marginBottom: "4px" }}>{stat.value}</div>
+                <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.3)", fontFamily: "'Press Start 2P', cursive" }}>{stat.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 24, textAlign: "center" }}>
+            <button
+              onClick={() => setShowShare(true)}
+              style={{
+                padding: "14px 32px",
+                background: `linear-gradient(135deg, ${t.accent}, ${t.accent}cc)`,
+                color: "#fff",
+                border: "none",
+                borderRadius: "12px",
+                fontFamily: "'Press Start 2P', cursive",
+                fontSize: "13px",
+                cursor: "pointer",
+                boxShadow: `0 8px 25px ${t.accent}40`,
+                marginBottom: 8
+              }}
+            >
+              Share Results to Socials
+            </button>
+            {shared && <div style={{ color: "#FFD700", fontSize: 12, marginTop: 8 }}>Thanks for sharing!</div>}
+          </div>
+        </div>
+        <LiveSocialShareModal
+          open={showShare}
+          onClose={() => setShowShare(false)}
+          onShare={handleShare}
+          results={vsResults}
+        />
+        </>
+      )}
 
       {me && (
         <div style={{

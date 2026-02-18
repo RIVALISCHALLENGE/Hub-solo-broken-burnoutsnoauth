@@ -223,6 +223,7 @@ export default function Navbar({ user, userProfile, theme, cycleTheme }) {
                 </Link>
               )}
               <Link to="/shop" onClick={closeDropdown}>Shop</Link>
+              <Link to="/settings" onClick={closeDropdown}>Settings</Link>
               <button onClick={() => { handleLogout(); closeDropdown(); }}>Logout</button>
             </div>
           )}

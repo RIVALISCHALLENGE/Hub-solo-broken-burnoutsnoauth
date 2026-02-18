@@ -1,6 +1,9 @@
+
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { chatStorage } from "./storage";
+import Filter from "bad-words";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -63,9 +66,29 @@ export function registerChatRoutes(app: Express): void {
   app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
-      const { content } = req.body;
+      const { content, userId, userEmail } = req.body;
+      const filter = new Filter();
 
-      // Save user message
+      // Moderation: check for profanity or flagged content
+      const isFlagged = filter.isProfane(content);
+      if (isFlagged) {
+        // Send flagged message to admin console (Firestore admin_notifications)
+        const db = getFirestore();
+        await db.collection("admin_notifications").add({
+          type: "CHAT_FLAG",
+          status: "pending",
+          message: content,
+          userId: userId || null,
+          userEmail: userEmail || null,
+          conversationId,
+          timestamp: Timestamp.now(),
+        });
+        // Optionally, do not save the message to chat, and notify user
+        res.status(200).json({ flagged: true, message: "Your message was flagged and sent to the admin for review." });
+        return;
+      }
+
+      // Save user message if clean
       await chatStorage.createMessage(conversationId, "user", content);
 
       // Get conversation history for context

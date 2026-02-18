@@ -3,34 +3,68 @@ let lastFeedbackTime = 0;
 const FEEDBACK_THROTTLE = 3000; // Min time between same feedback (ms)
 const feedbackCache = new Set();
 
+
+// Try to select the most human-like voice available
+function getBestVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  // Prioritize Google, Microsoft, Apple, or other neural voices
+  const preferred = [
+    /Google US English/i,
+    /Google UK English/i,
+    /Microsoft Aria Online/i,
+    /Microsoft Jenny/i,
+    /Microsoft Guy/i,
+    /Apple Siri/i,
+    /en-US/i
+  ];
+  for (const pattern of preferred) {
+    const found = voices.find(v => pattern.test(v.name));
+    if (found) return found;
+  }
+  // Fallback to first English voice
+  return voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0] || null;
+}
+
 export function speakFeedback(text) {
   if (!('speechSynthesis' in window)) {
     console.log('Web Speech API not supported');
     return;
   }
-  
+
   const now = Date.now();
-  
+
   // Throttle repeated feedback
   if (feedbackCache.has(text) && now - lastFeedbackTime < FEEDBACK_THROTTLE) {
     return;
   }
-  
+
   // Cancel previous speech
   speechSynthesis.cancel();
-  
+
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.8; // Slower speech for clarity
+  utterance.rate = 0.92; // Slightly slower for clarity
   utterance.pitch = 1;
   utterance.volume = 1;
-  
+
+  // Set best available voice
+  const setVoice = () => {
+    const best = getBestVoice();
+    if (best) utterance.voice = best;
+    speechSynthesis.speak(utterance);
+    feedbackCache.clear();
+    feedbackCache.add(text);
+  };
   utterance.onend = () => {
     lastFeedbackTime = now;
   };
-  
-  speechSynthesis.speak(utterance);
-  feedbackCache.clear();
-  feedbackCache.add(text);
+  // Some browsers load voices asynchronously
+  if (speechSynthesis.getVoices().length === 0) {
+    speechSynthesis.onvoiceschanged = setVoice;
+    speechSynthesis.getVoices();
+  } else {
+    setVoice();
+  }
 }
 
 export function speakNumber(num) {
