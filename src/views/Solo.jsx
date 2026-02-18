@@ -11,15 +11,12 @@ const COACH_VOICE_STORAGE_KEY = "rivalis_coach_voice_model";
 
 export default function Solo({ user, userProfile }) {
   const [loading, setLoading] = useState(true);
-<<<<<<< HEAD
   const [showShare, setShowShare] = useState(false);
   const [lastStats, setLastStats] = useState(null);
-=======
   const [voiceModel, setVoiceModel] = useState(() => {
     if (typeof window === "undefined") return DEFAULT_VOICE_MODEL;
     return window.localStorage.getItem(COACH_VOICE_STORAGE_KEY) || DEFAULT_VOICE_MODEL;
   });
->>>>>>> fd3c5c77fd87dbbad7751416d155ae74eae282b0
   const navigate = useNavigate();
 
   const handleVoiceModelChange = (event) => {
@@ -86,9 +83,6 @@ export default function Solo({ user, userProfile }) {
   return (
     <div style={{ width: "100%", height: "calc(100vh - 64px)", position: "relative", overflow: "hidden", backgroundColor: "#000" }}>
       {loading && <LoadingScreen />}
-<<<<<<< HEAD
-=======
-
       <div style={{
         position: "absolute",
         top: 14,
@@ -125,8 +119,6 @@ export default function Solo({ user, userProfile }) {
           ))}
         </select>
       </div>
-
->>>>>>> fd3c5c77fd87dbbad7751416d155ae74eae282b0
       <SoloSession
         userId={user.uid}
         onSessionEnd={handleSessionEnd}
