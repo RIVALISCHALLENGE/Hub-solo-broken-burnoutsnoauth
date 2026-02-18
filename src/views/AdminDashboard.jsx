@@ -1,5 +1,8 @@
 import { LiveService } from "../services/liveService.js";
+import LogsGraph from "../components/ChatbotTour/LogsGraph.jsx";
+import { UsageService } from "../services/usageService.js";
   const [rooms, setRooms] = useState([]);
+  const [dau, setDau] = useState([]);
   // Fetch all live rooms/lobbies in real time
   useEffect(() => {
     if (tab === "rooms") {
@@ -41,6 +44,13 @@ function AdminDashboard() {
     const unsub = ChatService.subscribeToGlobalMessages(setChatMessages, 20);
     return () => unsub && unsub();
   }, []);
+
+  // Fetch DAU for usage chart
+  useEffect(() => {
+    if (tab === "analytics") {
+      UsageService.getDAU(14).then(setDau);
+    }
+  }, [tab]);
 
   // Fetch logs and admin actions from backend
   useEffect(() => {
@@ -174,8 +184,11 @@ function AdminDashboard() {
       {tab === "analytics" && (
         <div>
           <h2 className="text-xl font-semibold mb-2">Analytics & Usage Charts</h2>
-          {/* TODO: DAU/MAU, retention, session length, top games/users, room/game heatmaps, export */}
-          <div className="text-zinc-400">Coming soon: Usage charts, heatmaps, and export tools.</div>
+          <div className="mb-6">
+            <LogsGraph data={dau.map(d => ({ date: d.date, mood: d.count >= 1 ? "Great" : d.count === 0 ? "Struggling" : "Okay" }))} type="mood" />
+            <div className="text-xs text-zinc-400 mt-2">Daily Active Users (last 14 days)</div>
+          </div>
+          {/* TODO: Add more charts: MAU, retention, session length, top games/users, heatmaps, export */}
         </div>
       )}
 
