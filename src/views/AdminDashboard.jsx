@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from "react";
+import Modal from "react-modal";
 
 function AdminDashboard() {
   // ...existing state and variable declarations...

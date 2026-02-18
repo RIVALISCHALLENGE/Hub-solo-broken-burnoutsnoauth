@@ -35,6 +35,7 @@ const MerchShop = lazy(() => import("./views/MerchShop.jsx"));
 const BoxingArena = lazy(() => import("./boxing/pages/Arena.tsx"));
 const Subscription = lazy(() => import("./views/Subscription.jsx"));
 const FitnessDashboard = lazy(() => import("./views/FitnessDashboard.jsx"));
+const Settings = lazy(() => import("./views/Settings.jsx"));
 
 const LEGACY_THEME_TO_MODE = {
   dark: "dark",
@@ -607,6 +608,14 @@ export default function App() {
                 <Suspense fallback={<div>LOADING...</div>}>
                   <AdminDashboard userProfile={userProfile} />
                 </Suspense>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute user={user} userProfile={userProfile}>
+                <Settings />
               </ProtectedRoute>
             }
           />

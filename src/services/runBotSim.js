@@ -1,21 +1,31 @@
 import { ensureBotsOnline, startBotPresenceLoop, simulateLobbyActivity, simulateBotChat, simulateBotGames } from "./botSim.js";
 
-// TODO: Replace with a real lobby ID from your Firestore if you want bots to join a lobby
-const lobbyId = null; // e.g., "abc123lobbyid"
+const lobbyId = process.env.BOT_LOBBY_ID || null;
+const botCount = Number(process.env.BOT_COUNT) || 12;
 
-async function runBotSimulation() {
-  // 1. Ensure bots exist and are online
-  const botIds = await ensureBotsOnline(12);
+export async function runBotSimulation() {
+  try {
+    console.log(`[runBotSim] starting: botCount=${botCount} lobbyId=${lobbyId}`);
+    const botIds = await ensureBotsOnline(botCount);
+    startBotPresenceLoop(botIds);
 
-  // 2. Start presence loop (keeps bots online)
-  startBotPresenceLoop(botIds);
-
-  // 3. Simulate lobby activity, chat, and games if a lobbyId is provided
-  if (lobbyId) {
-    await simulateLobbyActivity(botIds, lobbyId);
-    await simulateBotChat(botIds, lobbyId);
-    await simulateBotGames(botIds, lobbyId);
+    if (lobbyId) {
+      await simulateLobbyActivity(botIds, lobbyId);
+      await simulateBotChat(botIds, lobbyId);
+      await simulateBotGames(botIds, lobbyId);
+    }
+    console.log(`[runBotSim] finished initial startup`);
+    return botIds;
+  } catch (err) {
+    console.error("[runBotSim] error:", err);
+    throw err;
   }
 }
 
-runBotSimulation();
+// Auto-run when executed directly; can be disabled by setting RUN_AS_SCRIPT=false
+if (process.env.RUN_AS_SCRIPT !== "false") {
+  runBotSimulation().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

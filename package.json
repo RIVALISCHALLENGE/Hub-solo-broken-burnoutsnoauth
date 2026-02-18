@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "smoke:live": "bash scripts/smoke_live_hub.sh"
+    "smoke:live": "bash scripts/smoke_live_hub.sh",
+    "start:bot-sim": "node src/services/runBotSim.js"
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",
@@ -39,6 +40,7 @@
     "pg": "^8.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-modal": "^3.16.1",
     "react-easy-crop": "^5.5.6",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^6.30.3",
