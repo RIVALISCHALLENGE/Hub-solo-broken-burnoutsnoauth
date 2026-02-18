@@ -77,13 +77,8 @@ export function registerChatRoutes(app: Express): void {
   app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
-<<<<<<< HEAD
-      const { content, userId, userEmail } = req.body;
-      const filter = new Filter();
-=======
-      const { content, userContext } = req.body;
-      const preferredName = extractPreferredName(userContext) || "Rival";
->>>>>>> fd3c5c77fd87dbbad7751416d155ae74eae282b0
+  const { content, userId, userEmail } = req.body;
+  const filter = new Filter();
 
       // Moderation: check for profanity or flagged content
       const isFlagged = filter.isProfane(content);

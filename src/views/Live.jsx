@@ -1094,10 +1094,10 @@ function ResultsScreen({ roomData, user, t, onPlayAgain, onQuit, matchTime, form
           <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", fontFamily: "'Press Start 2P', cursive", marginBottom: "12px" }}>YOUR STATS</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", textAlign: "center" }}>
             {[
-              { label: "RANK", value: `#${myRank}", color: myRank === 1 ? "#FFD700" : "#fff" },
+              { label: "RANK", value: `#${myRank}`, color: myRank === 1 ? "#FFD700" : "#fff" },
               { label: "SCORE", value: me.score || 0, color: t.accent },
               { label: "REPS", value: me.totalReps || 0, color: "#0f0" },
-              { label: "TICKETS", value: `🎟️ ${me.ticketsEarned || 0}", color: "#FFD700" },
+              { label: "TICKETS", value: `🎟️ ${me.ticketsEarned || 0}`, color: "#FFD700" },
             ].map((stat) => (
               <div key={stat.label}>
                 <div style={{ fontFamily: "'Press Start 2P', cursive", fontSize: "16px", color: stat.color, marginBottom: "4px" }}>{stat.value}</div>

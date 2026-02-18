@@ -10,43 +10,7 @@ import {
     DEFAULT_VOICE_MODEL,
 } from '../../logic/voiceCoach.js';
 
-<<<<<<< HEAD
-// Enhanced speak function: picks best available voice
-function speak(text) {
-    if (!('speechSynthesis' in window)) return;
-    const utterance = new window.SpeechSynthesisUtterance(text);
-    utterance.rate = 0.92;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = [
-        /Google US English/i,
-        /Google UK English/i,
-        /Microsoft Aria Online/i,
-        /Microsoft Jenny/i,
-        /Microsoft Guy/i,
-        /Apple Siri/i,
-        /en-US/i
-    ];
-    let best = null;
-    for (const pattern of preferred) {
-        best = voices.find(v => pattern.test(v.name));
-        if (best) break;
-    }
-    if (!best) best = voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0] || null;
-    if (best) utterance.voice = best;
-    if (voices.length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.speak(utterance);
-        window.speechSynthesis.getVoices();
-    } else {
-        window.speechSynthesis.speak(utterance);
-    }
-}
-
-export default function SoloSession({ userId, onSessionEnd }) {
-=======
 export default function SoloSession({ userId, onSessionEnd, voiceModel = DEFAULT_VOICE_MODEL }) {
->>>>>>> fd3c5c77fd87dbbad7751416d155ae74eae282b0
     const [deck] = useState(() => shuffleSoloDeck());
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [totalReps, setTotalReps] = useState(0);

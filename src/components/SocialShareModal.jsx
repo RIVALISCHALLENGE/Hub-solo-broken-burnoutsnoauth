@@ -157,5 +157,5 @@ async function shareRivalisResults(results) {
   } catch (err) {
     console.log("Share cancelled:", err);
   }
-}
+// removed extraneous closing brace
 }

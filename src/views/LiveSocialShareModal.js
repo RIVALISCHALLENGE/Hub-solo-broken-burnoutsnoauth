@@ -1,3 +1,4 @@
-import SocialShareModal from "../components/SocialShareModal";
+import LiveSocialShareModal, { animateAndShareRivalisVS } from "./LiveSocialShareModal.jsx";
 
-export default SocialShareModal;
+export default LiveSocialShareModal;
+export { animateAndShareRivalisVS };
