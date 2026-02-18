@@ -297,14 +297,38 @@ function AdminDashboard() {
 
       {tab === "urgencies" && (
         <div>
-          <h2 className="text-xl font-semibold mb-2">Urgencies (Profanity, Cheating, Stalking, Abuse)</h2>
+          <h2 className="text-xl font-semibold mb-2">Urgencies (Flagged Content & Abuse)</h2>
           <table className="w-full text-left mb-4">
             <thead>
-              <tr><th>Type</th><th>User</th><th>Message</th><th>Time</th></tr>
+              <tr><th>Type</th><th>User</th><th>Message</th><th>Time</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {urgencies.map(l => (
-                <tr key={l.id}><td>{l.type}</td><td>{l.userId || l.user || l.email}</td><td>{l.message || l.text || ""}</td><td>{l.timestamp ? (new Date(l.timestamp._seconds ? l.timestamp._seconds * 1000 : l.timestamp)).toLocaleString() : ""}</td></tr>
+              {urgencies.length === 0 && (
+                <tr><td colSpan={5} className="text-zinc-400">No urgent logs found.</td></tr>
+              )}
+              {urgencies.map((log, i) => (
+                <tr key={log.id || i} className="border-b border-zinc-700">
+                  <td>{log.type}</td>
+                  <td>{log.userId || log.user || log.email || "-"}</td>
+                  <td className="max-w-xs truncate" title={log.message || log.text}>{log.message || log.text}</td>
+                  <td>{log.timestamp ? (new Date(log.timestamp.seconds ? log.timestamp.seconds * 1000 : log.timestamp._seconds ? log.timestamp._seconds * 1000 : log.timestamp)).toLocaleString() : ""}</td>
+                  <td className="space-x-2">
+                    <button className="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold" onClick={async () => {
+                      if (window.confirm(`Ban user ${log.userId || log.user || log.email}?`)) {
+                        await fetch("/api/admin/user-action", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_ADMIN_SECRET}` },
+                          body: JSON.stringify({ action: "ban", userId: log.userId || log.user || log.email })
+                        });
+                        alert("User banned.");
+                      }
+                    }}>Ban</button>
+                    <button className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold" onClick={async () => {
+                      await navigator.clipboard.writeText(log.message || log.text || "");
+                      alert("Message copied to clipboard.");
+                    }}>Copy</button>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
