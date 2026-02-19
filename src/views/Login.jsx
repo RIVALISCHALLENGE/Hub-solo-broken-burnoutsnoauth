@@ -46,7 +46,7 @@ const styles = {
   }
 };
 
-export default function Login() {
+export default function Login({ isA11yEnabled }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -54,6 +54,13 @@ export default function Login() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [clickCount, setClickCount] = useState(0);
+
+  useEffect(() => {
+    if (isA11yEnabled) {
+      const msg = new SpeechSynthesisUtterance("Login page. Please enter your email and password.");
+      window.speechSynthesis.speak(msg);
+    }
+  }, [isA11yEnabled]);
 
   const handleTitleClick = () => {
     const newCount = clickCount + 1;
