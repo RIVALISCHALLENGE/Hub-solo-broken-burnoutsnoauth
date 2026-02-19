@@ -1,7 +1,5 @@
-import {
-  listBots,
-  updateBotStats,
-  forceBotJoin,
-  forceBotLeave,
-  updateBotConfig,
-} from '../../hub-admin-bots.js';
+import React from 'react';
+
+export default function AdminBotsModule() {
+  return <div>Bots temporarily disabled</div>;
+}
