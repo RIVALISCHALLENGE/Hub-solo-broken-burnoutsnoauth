@@ -1,31 +1,41 @@
-import React from "react";
+render() {
+  const t = this.context || { accent: "#ff0000" };
 
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
+  if (this.state.hasError) {
+    return (
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#1a1a1a',
+        color: t?.accent || "#ff0000",
+        fontFamily: "'Press Start 2P', cursive",
+        textAlign: 'center',
+        padding: '2rem'
+      }}>
+        <h1>SYSTEM CRITICAL ERROR</h1>
+        <p style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#fff' }}>
+          The arena has encountered a fatal anomaly.
+        </p>
+        <button 
+          onClick={() => window.location.reload()}
+          style={{
+            marginTop: '2rem',
+            padding: '1rem 2rem',
+            background: t?.accent || "#ff0000",
+            border: 'none',
+            color: '#fff',
+            cursor: 'pointer',
+            fontFamily: "'Press Start 2P', cursive"
+          }}
+        >
+          REBOOT SYSTEM
+        </button>
+      </div>
+    );
   }
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error("CRASH:", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: 20, background: "black", color: "red" }}>
-          <h1>REAL ERROR:</h1>
-          <pre>{this.state.error?.stack}</pre>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
+  return this.props.children;
 }
-
-export default ErrorBoundary;
