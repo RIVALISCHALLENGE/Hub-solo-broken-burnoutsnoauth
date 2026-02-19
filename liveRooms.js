@@ -3,12 +3,23 @@
 
 const admin = require('firebase-admin');
 const fetch = require('node-fetch'); // If Node 18+, you can use global fetch
-const serviceAccount = require('../firebase-adminsdk.json'); // Adjust path as needed
+const path = require('path');
+const serviceAccountPath = path.join(__dirname, 'firebase-adminsdk.json');
+let serviceAccount;
+try {
+  serviceAccount = require(serviceAccountPath);
+} catch (e) {
+  console.warn('firebase-adminsdk.json not found – liveRooms features will be unavailable');
+  serviceAccount = null;
+}
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-const db = admin.firestore();
+let db = null;
+if (serviceAccount) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  db = admin.firestore();
+}
 const { addDoc, updateDoc, deleteDoc, collection, doc } = require('firebase-admin/firestore');
 
 // Create a live room and Discord VC
