@@ -5,6 +5,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import "./index.css";
 import { AccessibilityProvider } from "./context/AccessibilityContext";
 import { AccessibilityWrapper } from "./components/accessibility/AccessibilityWrapper";
+import { VoiceNavigator } from "./components/accessibility/VoiceNavigator";
 
 const Login = lazy(() => import("./views/Login.jsx"));
 const Dashboard = lazy(() => import("./views/Dashboard.jsx"));
@@ -43,6 +44,7 @@ export default function App() {
     <AccessibilityProvider>
       <AccessibilityWrapper>
         <Suspense fallback={<div style={{color:"white"}}>Loading...</div>}>
+          <VoiceNavigator />
           <button className="theme-toggle" onClick={toggleTheme}>
             {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
           </button>
