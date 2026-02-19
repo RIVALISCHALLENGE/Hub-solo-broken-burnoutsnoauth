@@ -1,3 +1,7 @@
-export default function AdminBotsModule() {
-  return <div>Bots temporarily disabled</div>;
-}
+import {
+  listBots,
+  updateBotStats,
+  forceBotJoin,
+  forceBotLeave,
+  updateBotConfig,
+} from 'Hub-solo-broken-burnoutsnoauth/src/hub-admin-bots.js';
