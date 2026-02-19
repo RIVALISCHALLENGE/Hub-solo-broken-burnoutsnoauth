@@ -4,4 +4,4 @@ import {
   forceBotJoin,
   forceBotLeave,
   updateBotConfig,
-} from 'Hub-solo-broken-burnoutsnoauth/src/hub-admin-bots.js';
+} from '../../hub-admin-bots.js';
