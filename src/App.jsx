@@ -59,13 +59,15 @@ export default function App() {
       <button className="theme-toggle" onClick={toggleTheme}>
         {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
       </button>
-      <AdBanner />
-      <Routes>
-        <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
-        <Route path="/login" element={<Login isA11yEnabled={isA11yEnabled} />} />
-        <Route path="/dashboard" element={user ? <Dashboard isA11yEnabled={isA11yEnabled} /> : <Navigate to="/login" />} />
-      </Routes>
-      <AdBanner />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <AdBanner />
+        <Routes>
+          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
+          <Route path="/login" element={<Login isA11yEnabled={isA11yEnabled} />} />
+          <Route path="/dashboard" element={user ? <Dashboard isA11yEnabled={isA11yEnabled} /> : <Navigate to="/login" />} />
+        </Routes>
+        <AdBanner />
+      </div>
     </Suspense>
   );
 }

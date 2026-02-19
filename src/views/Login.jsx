@@ -109,8 +109,8 @@ export default function Login({ isA11yEnabled }) {
   };
 
   return (
-    <div className="hero-background">
-      <div className="overlay-card">
+    <div className="hero-background" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', justifyContent: 'center', alignItems: 'center' }}>
+      <div className="overlay-card" style={{ position: 'relative', zIndex: 10 }}>
         <h1 style={styles.rivalisTitle} onClick={handleTitleClick}>RIVALIS</h1>
         <p style={styles.tagline}>GET HOOKED.{'\n'}OUT-TRAIN.{'\n'}OUT-RIVAL.</p>
         <form onSubmit={handleSubmit}>

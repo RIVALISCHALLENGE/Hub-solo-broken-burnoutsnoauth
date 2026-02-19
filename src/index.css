@@ -32,10 +32,20 @@ body {
   background-image: url('/src/assets/background.png');
   background-size: cover;
   background-position: center;
-  display: flex;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  display: flex !important;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .overlay-card {
