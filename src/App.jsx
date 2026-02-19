@@ -46,8 +46,130 @@ const LEGACY_THEME_TO_MODE = {
 };
 
 export default function App() {
+      // Accessibility: Voice control (speech recognition)
+      useEffect(() => {
+        if (!accessibilityEnabled) return;
+        let recognition;
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = false;
+          recognition.lang = 'en-US';
+          recognition.onresult = (event) => {
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                const transcript = event.results[i][0].transcript.trim().toLowerCase();
+                // Simple navigation commands
+                if (transcript.includes('go to')) {
+                  const page = transcript.replace('go to', '').trim();
+                  // Map spoken page names to routes
+                  const routeMap = {
+                    'dashboard': '/dashboard',
+                    'profile': '/profile',
+                    'chat': '/global-chat',
+                    'leaderboard': '/leaderboard',
+                    'solo': '/solo',
+                    'burnouts': '/burnouts',
+                    'live': '/live',
+                    'settings': '/settings',
+                    'subscription': '/subscription',
+                    'shop': '/merch-shop',
+                    'admin': '/admin-dashboard',
+                    'home': '/',
+                  };
+                  const route = routeMap[page];
+                  if (route) {
+                    navigate(route);
+                    speakText(`Navigating to ${page}`);
+                  } else {
+                    speakText(`Page ${page} not found.`);
+                  }
+                } else if (transcript.includes('read page')) {
+                  handleReadContent();
+                } else {
+                  speakText('Command not recognized.');
+                }
+              }
+            }
+          };
+          recognition.onerror = (e) => {
+            speakText('Voice recognition error.');
+          };
+          recognition.onend = () => {
+            // Restart for continuous listening
+            if (accessibilityEnabled) recognition.start();
+          };
+          recognition.start();
+        } else {
+          speakText('Speech recognition not supported in this browser.');
+        }
+        return () => {
+          if (recognition) recognition.stop();
+        };
+      }, [accessibilityEnabled]);
+    // Accessibility: Hidden activation state
+    const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
+    const [tapCount, setTapCount] = useState(0);
+
+    // Handler for hidden activation (top-left corner tap)
+    useEffect(() => {
+      const handleTap = (e) => {
+        // Only count taps in top-left 80x80px
+        if (e.clientX < 80 && e.clientY < 80) {
+          setTapCount((prev) => {
+            const next = prev + 1;
+            if (next >= 5) {
+              setAccessibilityEnabled(true);
+              speakText('Accessibility features enabled.');
+              return 0;
+            }
+            return next;
+          });
+        } else {
+          setTapCount(0);
+        }
+      };
+      window.addEventListener('mousedown', handleTap);
+      window.addEventListener('touchstart', handleTap);
+      return () => {
+        window.removeEventListener('mousedown', handleTap);
+        window.removeEventListener('touchstart', handleTap);
+      };
+    }, []);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Accessibility: Text-to-Speech utility
+  const speakText = (text) => {
+    if ('speechSynthesis' in window) {
+      const utterance = new window.SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-AU'; // Australian English
+      // Try to select 'Karen' voice
+      const voices = window.speechSynthesis.getVoices();
+      const karenVoice = voices.find(v => v.name.toLowerCase().includes('karen'));
+      if (karenVoice) {
+        utterance.voice = karenVoice;
+      }
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Example: Speak current page name on mount
+  useEffect(() => {
+    const page = location.pathname.replace('/', '') || 'home';
+    speakText(`You are on the ${page} page.`);
+  }, [location.pathname]);
+
+  // Accessibility: Button to read main content
+  const handleReadContent = () => {
+    const main = document.querySelector('main');
+    if (main) {
+      speakText(main.innerText);
+    } else {
+      speakText('Main content not found.');
+    }
+  };
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);

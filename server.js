@@ -7,38 +7,19 @@ const { registerImageRoutes } = require("./replit_integrations/image");
 const { getRandomSocialImage, getSocialImageById } = require("./replit_integrations/live-engine-sync/socialImages");
 const { WebhookHandlers } = require("./stripe/webhookHandlers");
 const { getUncachableStripeClient, getStripePublishableKey, getStripeSync } = require("./stripe/stripeClient");
+
 const { runMigrations } = require('stripe-replit-sync');
+
+// --- Live Rooms + Discord VC API ---
+const liveRoomsRouter = require('./liveRooms.routes');
+const stripeCheckoutSessionRouter = require('./stripe/createCheckoutSession.routes');
 
 const app = express();
 app.use(cors());
 
 async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    console.warn('DATABASE_URL not set — skipping Stripe initialization');
-    return;
-  }
-  try {
-    console.log('Initializing Stripe schema...');
-    await runMigrations({ databaseUrl, schema: 'stripe' });
-    console.log('Stripe schema ready');
-
-    const stripeSync = await getStripeSync();
-
-    console.log('Setting up managed webhook...');
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    const webhookResult = await stripeSync.findOrCreateManagedWebhook(
-      `${webhookBaseUrl}/api/stripe/webhook`
-    );
-    console.log('Webhook configured:', JSON.stringify(webhookResult).slice(0, 200));
-
-    console.log('Syncing Stripe data...');
-    stripeSync.syncBackfill()
-      .then(() => console.log('Stripe data synced'))
-      .catch((err) => console.error('Error syncing Stripe data:', err));
-  } catch (error) {
-    console.error('Failed to initialize Stripe:', error);
-  }
+  // No DATABASE_URL or SQL migrations needed for Firebase
+  console.log('Stripe backend initialized for Firebase.');
 }
 
 initStripe();
@@ -66,7 +47,40 @@ app.post(
   }
 );
 
+
 app.use(express.json());
+
+// Mount liveRooms API routes
+app.use(liveRoomsRouter);
+app.use('/api/stripe', stripeCheckoutSessionRouter);
+
+// Payments API: Stripe Checkout Session
+app.post('/api/payments/checkout', async (req, res) => {
+  const validPriceIds = [
+    'price_1T1XanJzhejoQ9C7S6D7XbwU',
+    'price_1T1XakJzhejoQ9C71HH5Bnv1',
+    'price_1T1XamJzhejoQ9C7wyhVRcHv',
+    'price_1T1XalJzhejoQ9C71ihd5lV6'
+  ];
+  const { priceId, userId } = req.body;
+  if (!validPriceIds.includes(priceId)) {
+    return res.status(400).json({ success: false, error: 'Invalid priceId' });
+  }
+  try {
+    const stripe = await getUncachableStripeClient();
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'payment',
+      success_url: `${req.protocol}://${req.get('host')}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.protocol}://${req.get('host')}/cancel`,
+      metadata: { userId }
+    });
+    res.json({ success: true, sessionUrl: session.url });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 function getAppBaseUrl(req) {
   const configuredDomain = process.env.REPLIT_DOMAINS?.split(',')[0];

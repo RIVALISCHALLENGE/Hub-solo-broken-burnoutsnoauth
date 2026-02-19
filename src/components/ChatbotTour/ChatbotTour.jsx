@@ -144,8 +144,11 @@ const ChatbotTour = ({ user, userProfile, onTourComplete, initialMessage }) => {
   const userName = userProfile?.nickname || user?.displayName || 'Rival';
 
   const getCoachVoiceModel = useCallback(() => {
-    if (typeof window === 'undefined') return DEFAULT_VOICE_MODEL;
-    return window.localStorage.getItem(COACH_VOICE_STORAGE_KEY) || DEFAULT_VOICE_MODEL;
+    // Use user-selected voice model from localStorage if available
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem("voiceName") || DEFAULT_VOICE_MODEL;
+    }
+    return DEFAULT_VOICE_MODEL;
   }, []);
 
   const narrateCoachText = useCallback((text, options = {}) => {

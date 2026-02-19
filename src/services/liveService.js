@@ -44,6 +44,15 @@ export const LiveService = {
       let externalSessionId = null;
       let discordVcLink = "";
 
+      // Always create a new Discord VC for every live game session using /create-vc
+      try {
+        const discordBotUrl = import.meta.env.VITE_DISCORD_BOT_URL || "http://localhost:5000";
+        // Use roomId as sessionId after creation, so we must create the room first, then call Discord
+        // We'll create the room without discordVcLink, then update it after getting the inviteLink
+      } catch (error) {
+        console.warn("Discord VC provisioning failed:", error.message);
+      }
+
       if (USE_LIVE_ENGINE_ROOMS) {
         const created = await callHubLiveEngineBridge("/api/live-engine/rooms/create", "POST", {
           gameMode: trickMode || "classic",
@@ -51,15 +60,6 @@ export const LiveService = {
           showdown,
         });
         externalSessionId = created?.sessionId || null;
-
-        if (externalSessionId) {
-          try {
-            const discord = await callHubLiveEngineBridge(`/api/live-engine/rooms/${externalSessionId}/discord-vc`, "POST", {});
-            discordVcLink = discord?.inviteLink || "";
-          } catch (error) {
-            console.warn("Discord VC provisioning failed:", error.message);
-          }
-        }
       }
 
       const roomData = {
@@ -99,9 +99,25 @@ export const LiveService = {
         lastActivity: Timestamp.now(),
         finishedAt: null,
         externalSessionId,
-        discordVcLink,
+        discordVcLink: "", // Will update after VC creation
       };
       const docRef = await addDoc(collection(db, "liveRooms"), roomData);
+      let discordVcLink = "";
+      try {
+        const discordBotUrl = import.meta.env.VITE_DISCORD_BOT_URL || "http://localhost:5000";
+        const discordRes = await fetch(`${discordBotUrl}/create-vc`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: docRef.id })
+        });
+        const discord = await discordRes.json();
+        if (discord?.inviteLink) {
+          discordVcLink = discord.inviteLink;
+          await updateDoc(docRef, { discordVcLink });
+        }
+      } catch (error) {
+        console.warn("Discord VC provisioning failed:", error.message);
+      }
       return { success: true, roomId: docRef.id };
     } catch (error) {
       return { success: false, error: error.message };
@@ -467,18 +483,29 @@ export const LiveService = {
 
   async deleteRoom(roomId) {
     try {
-      if (USE_LIVE_ENGINE_ROOMS) {
-        const roomRef = doc(db, "liveRooms", roomId);
-        const roomSnap = await getDoc(roomRef);
-        const roomData = roomSnap.exists() ? roomSnap.data() : null;
+      const roomRef = doc(db, "liveRooms", roomId);
+      const roomSnap = await getDoc(roomRef);
+      const roomData = roomSnap.exists() ? roomSnap.data() : null;
 
-        if (roomData?.externalSessionId) {
-          try {
-            await callHubLiveEngineBridge(`/api/live-engine/rooms/${roomData.externalSessionId}/end`, "POST", {});
-          } catch (error) {
-            console.warn("External room cleanup failed:", error.message);
-          }
+      // End external session if needed
+      if (USE_LIVE_ENGINE_ROOMS && roomData?.externalSessionId) {
+        try {
+          await callHubLiveEngineBridge(`/api/live-engine/rooms/${roomData.externalSessionId}/end`, "POST", {});
+        } catch (error) {
+          console.warn("External room cleanup failed:", error.message);
         }
+      }
+
+      // Destroy Discord VC if present
+      try {
+        const discordBotUrl = import.meta.env.VITE_DISCORD_BOT_URL || "http://localhost:5000";
+        await fetch(`${discordBotUrl}/delete-vc`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: roomId })
+        });
+      } catch (error) {
+        console.warn("Discord VC destruction failed:", error.message);
       }
 
       await deleteDoc(doc(db, "liveRooms", roomId));
