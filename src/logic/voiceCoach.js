@@ -1,39 +1,15 @@
 const VOICE_MODEL_OPTIONS = [
   {
-    id: "auto",
-    label: "Auto Smooth",
-    description: "Best available smooth voice",
-    rate: 0.94,
-    pitch: 1,
-    preferred: ["aria", "samantha", "google us english", "zira", "alloy", "neural", "natural"],
-  },
-  {
-    id: "coach_energetic",
-    label: "Coach Energetic",
-    description: "Fast, clear, high-energy voice",
+    id: "Karen-en-AU",
+    label: "Karen (en-AU)",
+    description: "Australian English voice (default)",
     rate: 1,
-    pitch: 1.03,
-    preferred: ["aria", "google us english", "samantha", "zira", "neural", "natural"],
-  },
-  {
-    id: "coach_grounded",
-    label: "Coach Grounded",
-    description: "Steady, confident voice",
-    rate: 0.92,
-    pitch: 0.95,
-    preferred: ["daniel", "guy", "aaron", "oliver", "neural", "natural"],
-  },
-  {
-    id: "coach_calm",
-    label: "Coach Calm",
-    description: "Clear and smooth pacing",
-    rate: 0.88,
-    pitch: 0.96,
-    preferred: ["samantha", "aria", "zira", "google us english", "neural", "natural"],
+    pitch: 1,
+    preferred: ["karen", "en-au"],
   },
 ];
 
-const DEFAULT_VOICE_MODEL = "auto";
+const DEFAULT_VOICE_MODEL = "Karen-en-AU";
 const MOTIVATION_COOLDOWN_MS = 9000;
 
 const MOTIVATION_LINES = [

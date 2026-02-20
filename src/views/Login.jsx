@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { auth } from "../firebase.js";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { UserService } from "../services/userService.js";
@@ -46,7 +46,7 @@ const styles = {
   }
 };
 
-export default function Login() {
+export default function Login({ isA11yEnabled }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -54,6 +54,13 @@ export default function Login() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [clickCount, setClickCount] = useState(0);
+
+  useEffect(() => {
+    if (isA11yEnabled) {
+      const msg = new SpeechSynthesisUtterance("Login page. Please enter your email and password.");
+      window.speechSynthesis.speak(msg);
+    }
+  }, [isA11yEnabled]);
 
   const handleTitleClick = () => {
     const newCount = clickCount + 1;
@@ -102,8 +109,8 @@ export default function Login() {
   };
 
   return (
-    <div className="hero-background">
-      <div className="overlay-card">
+    <div className="hero-background" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', justifyContent: 'center', alignItems: 'center' }}>
+      <div className="overlay-card" style={{ position: 'relative', zIndex: 10 }}>
         <h1 style={styles.rivalisTitle} onClick={handleTitleClick}>RIVALIS</h1>
         <p style={styles.tagline}>GET HOOKED.{'\n'}OUT-TRAIN.{'\n'}OUT-RIVAL.</p>
         <form onSubmit={handleSubmit}>

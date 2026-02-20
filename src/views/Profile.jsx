@@ -91,10 +91,23 @@ export default function Profile({ user, userProfile }) {
   const [activeChallenges, setActiveChallenges] = useState([]);
   const [lookingForBuddy, setLookingForBuddy] = useState(userProfile?.lookingForBuddy || false);
   const [potentialBuddies, setPotentialBuddies] = useState([]);
+  // Use user-selected voice model from settings/localStorage if available, else default to Karen (en-AU)
   const [coachVoiceModel, setCoachVoiceModel] = useState(() => {
-    if (typeof window === "undefined") return DEFAULT_VOICE_MODEL;
-    return window.localStorage.getItem(COACH_VOICE_STORAGE_KEY) || DEFAULT_VOICE_MODEL;
+    if (typeof window !== "undefined") {
+      const userVoice = window.localStorage.getItem("voiceName");
+      return userVoice || "Karen-en-AU";
+    }
+    return "Karen-en-AU";
   });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const userVoice = window.localStorage.getItem("voiceName");
+      if (userVoice && userVoice !== coachVoiceModel) {
+        setCoachVoiceModel(userVoice);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (userProfile) {
@@ -528,45 +541,11 @@ export default function Profile({ user, userProfile }) {
               borderRadius: "8px"
             }}>
               <label style={{ color: t.accent, display: "block", marginBottom: "0.5rem", fontSize: "0.7rem", fontFamily: "'Press Start 2P', cursive" }}>
-                AI COACH VOICE
+                {/* AI COACH VOICE: User override possible via Settings */}
+                <span style={{ color: t.accent, fontSize: "0.9rem" }}>
+                  AI Coach Voice: {coachVoiceModel || "Karen (en-AU)"}
+                </span>
               </label>
-              <select
-                value={coachVoiceModel}
-                onChange={handleCoachVoiceModelChange}
-                style={{
-                  width: "100%",
-                  padding: "0.6rem",
-                  background: "#000",
-                  border: `2px solid ${t.accent}`,
-                  borderRadius: "8px",
-                  color: "#fff",
-                  fontSize: "14px",
-                  boxShadow: `0 0 10px ${t.shadowXs}`
-                }}
-              >
-                {VOICE_MODEL_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={previewCoachVoice}
-                style={{
-                  marginTop: "0.6rem",
-                  width: "100%",
-                  padding: "0.5rem 0.7rem",
-                  background: "#000000",
-                  border: `2px solid ${t.accent}`,
-                  borderRadius: "8px",
-                  color: t.accent,
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  fontSize: "12px"
-                }}
-              >
-                Preview Voice
-              </button>
             </div>
             {isEditing ? (
               <div>

@@ -10,7 +10,14 @@ import {
     DEFAULT_VOICE_MODEL,
 } from '../../logic/voiceCoach.js';
 
-export default function SoloSession({ userId, onSessionEnd, voiceModel = DEFAULT_VOICE_MODEL }) {
+export default function SoloSession({ userId, onSessionEnd }) {
+        // Use user-selected voice model from localStorage if available
+        const getVoiceModel = () => {
+            if (typeof window !== "undefined") {
+                return window.localStorage.getItem("voiceName") || DEFAULT_VOICE_MODEL;
+            }
+            return DEFAULT_VOICE_MODEL;
+        };
     const [deck] = useState(() => shuffleSoloDeck());
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [totalReps, setTotalReps] = useState(0);
@@ -47,7 +54,7 @@ export default function SoloSession({ userId, onSessionEnd, voiceModel = DEFAULT
             if (lastAnnouncedCardIndex.current !== currentCardIndex) {
                 if (!isMuted) {
                     speakCoach(`${deck[currentCardIndex].exercise}. ${deck[currentCardIndex].reps} reps.`, {
-                        voiceModel,
+                        voiceModel: getVoiceModel(),
                         interrupt: true,
                     });
                 }

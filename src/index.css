@@ -1,0 +1,120 @@
+:root {
+  --bg-color: #000;
+  --text-color: #fff;
+  --accent-color: #ff0000;
+  --logo-color: #ff0000;
+  --card-bg: rgba(0, 0, 0, 0.7);
+}
+
+[data-theme='light'] {
+  --bg-color: #f0f0f0;
+  --text-color: #000;
+  --accent-color: #d00000;
+  --logo-color: #d00000;
+  --card-bg: rgba(255, 255, 255, 0.9);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.hero-background {
+  min-height: 100vh;
+  background-image: url('/src/assets/background.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.overlay-card {
+  background: var(--card-bg);
+  padding: 2rem;
+  border-radius: 15px;
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--accent-color);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+input {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--accent-color);
+  color: var(--text-color);
+  border-radius: 5px;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent-color);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 0.8rem;
+  transition: transform 0.2s;
+}
+
+button:hover {
+  transform: scale(1.02);
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  width: auto;
+  padding: 10px;
+}
+
+.ad-banner {
+  width: 100%;
+  max-width: 728px;
+  height: 90px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 20px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #666;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.accessibility-trigger {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100px;
+  height: 100px;
+  z-index: 9999;
+  cursor: pointer;
+}
