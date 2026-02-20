@@ -1,0 +1,20 @@
+[33ma36e262 [36m2026-02-19 [32mdev-bot [madded stripe and accessibilty for moms
+[33mae40a08 [36m2026-02-18 [32mdev-bot [mAdd real data methods for MAU, retention, session lengths, and top games/users to UsageService.js (placeholders for now)
+[33ma4401dd [36m2026-02-18 [32mdev-bot [mfeat(admin): added new Urgencies tab
+[33m9b18f55 [36m2026-02-18 [32mdev-bot [mfeat(admin): added Analytics
+[33m7195cfc [36m2026-02-18 [32mdev-bot [mfeat(admin): add ban, promote, demote, kick actions to Users tab with backend wiring
+[33mb33053d [36m2026-02-18 [32mdev-bot [mfeat(admin): real-time live room listing in Rooms & Games tab
+[33m716b950 [36m2026-02-18 [32mdev-bot [mchore: install react-modal and fix build
+[33m5fa6a98 [36m2026-02-18 [32mdev-bot [mchore: push local changes
+[33m1464502 [36m2026-02-18 [32mGregory [mMerge pull request #1 from joystickgrindhouse-debug/pr/add-release-note
+[33m6632d01 [36m2026-02-18 [32mdev-bot [mchore(release): add release note for AdminDashboard fix
+[33m7f4b38d [36m2026-02-18 [32mdev-bot [mchore(release): add release note for AdminDashboard fix
+[33m3c42ee8 [36m2026-02-18 [32mdev-bot [mfix(admin): resolve AdminDashboard JSX errors and re-export animateAndShareRivalisVS; build clean
+[33m2e868d3 [36m2026-02-18 [32mGregory [mresolve solo conflict
+[33mfdc4fb3 [36m2026-02-18 [32mGregory [madmin dashnoard update
+[33m089a611 [36m2026-02-18 [32mGregory [mMerge branch 'main' of https://github.com/joystickgrindhouse-debug/Hub-solo-broken-burnoutsnoauth
+[33m95beb74 [36m2026-02-18 [32mGregory [mUpgrade social share: animated VS, real share check, reward tickets only on success; admin and dashboard optimizations
+[33mfd3c5c7 [36m2026-02-18 [32mGregory [mEnhance bot system: bots now join user lobbies, chat with human-like taunts, and presence is scheduled by time of day. Master runner script updated.
+[33m759a1a6 [36m2026-02-18 [32mGregory [mfix: force service worker update and reload for navigation issues
+[33m52efa97 [36m2026-02-17 [32mGregory [mAdd end-to-end smoke test script and npm run shortcut
+[33m997c591 [36m2026-02-16 [32mGregory [mfeat: stripe checkout, profile persistence, mobile polish, and ai tier gating

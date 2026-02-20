@@ -9,8 +9,7 @@
     "smoke:live": "bash scripts/smoke_live_hub.sh"
   },
   "dependencies": {
-    "@stripe/react-stripe-js": "^3.9.0",
-    "@stripe/stripe-js": "^8.1.0",
+    
     "@emoji-mart/data": "^1.2.1",
     "@emoji-mart/react": "^1.1.1",
     "@google-cloud/storage": "^7.19.0",

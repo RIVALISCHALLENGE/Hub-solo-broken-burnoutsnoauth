@@ -11,6 +11,7 @@ const { runMigrations } = require('stripe-replit-sync');
 
 const app = express();
 app.use(cors());
+const ENABLE_STRIPE = process.env.ENABLE_STRIPE === 'true';
 
 async function initStripe() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -41,30 +42,37 @@ async function initStripe() {
   }
 }
 
-initStripe();
+if (ENABLE_STRIPE) {
+  initStripe();
 
-app.post(
-  '/api/stripe/webhook',
-  express.raw({ type: 'application/json' }),
-  async (req, res) => {
-    const signature = req.headers['stripe-signature'];
-    if (!signature) {
-      return sendStripeError(res, 400, 'Missing Stripe signature');
-    }
-    try {
-      const sig = Array.isArray(signature) ? signature[0] : signature;
-      if (!Buffer.isBuffer(req.body)) {
-        console.error('STRIPE WEBHOOK ERROR: req.body is not a Buffer.');
-        return sendStripeError(res, 500, 'Failed to process Stripe webhook');
+  app.post(
+    '/api/stripe/webhook',
+    express.raw({ type: 'application/json' }),
+    async (req, res) => {
+      const signature = req.headers['stripe-signature'];
+      if (!signature) {
+        return sendStripeError(res, 400, 'Missing Stripe signature');
       }
-      await WebhookHandlers.processWebhook(req.body, sig);
-      res.status(200).json({ received: true });
-    } catch (error) {
-      console.error('Webhook error:', error.message);
-      sendStripeError(res, 400, 'Failed to process Stripe webhook');
+      try {
+        const sig = Array.isArray(signature) ? signature[0] : signature;
+        if (!Buffer.isBuffer(req.body)) {
+          console.error('STRIPE WEBHOOK ERROR: req.body is not a Buffer.');
+          return sendStripeError(res, 500, 'Failed to process Stripe webhook');
+        }
+        await WebhookHandlers.processWebhook(req.body, sig);
+        res.status(200).json({ received: true });
+      } catch (error) {
+        console.error('Webhook error:', error.message);
+        sendStripeError(res, 400, 'Failed to process Stripe webhook');
+      }
     }
-  }
-);
+  );
+} else {
+  // Stripe disabled: provide harmless stubs for webhook endpoint
+  app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (_req, res) => {
+    return sendStripeError(res, 503, 'Stripe integration is disabled');
+  });
+}
 
 app.use(express.json());
 
@@ -492,17 +500,18 @@ app.post('/api/live-engine/share-bonus', async (req, res) => {
     });
   }
 });
-app.get('/api/stripe/publishable-key', async (req, res) => {
-  try {
-    const key = await getStripePublishableKey();
-    res.json({ publishableKey: key });
-  } catch (error) {
-    console.error('Error getting publishable key:', error);
-    sendStripeError(res, 500, 'Failed to fetch Stripe publishable key');
-  }
-});
+if (ENABLE_STRIPE) {
+  app.get('/api/stripe/publishable-key', async (req, res) => {
+    try {
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (error) {
+      console.error('Error getting publishable key:', error);
+      sendStripeError(res, 500, 'Failed to fetch Stripe publishable key');
+    }
+  });
 
-app.get('/api/stripe/products', async (req, res) => {
+  app.get('/api/stripe/products', async (req, res) => {
   try {
     const { Pool } = require('pg');
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
@@ -547,13 +556,18 @@ app.get('/api/stripe/products', async (req, res) => {
     }
 
     res.json({ products: Array.from(productsMap.values()) });
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    sendStripeError(res, 500, 'Failed to fetch Stripe products');
-  }
-});
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      sendStripeError(res, 500, 'Failed to fetch Stripe products');
+    }
+  });
+} else {
+  app.get('/api/stripe/publishable-key', (_req, res) => sendStripeError(res, 503, 'Stripe integration disabled'));
+  app.get('/api/stripe/products', (_req, res) => sendStripeError(res, 503, 'Stripe integration disabled'));
+}
 
-app.get('/api/subscription/current', verifyFirebaseToken, async (req, res) => {
+if (ENABLE_STRIPE) {
+  app.get('/api/subscription/current', verifyFirebaseToken, async (req, res) => {
   try {
     const { db } = require('./src/firebase_server');
     const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -590,9 +604,9 @@ app.get('/api/subscription/current', verifyFirebaseToken, async (req, res) => {
     console.error('Error fetching subscription:', error);
     res.status(500).json({ error: 'Failed to fetch subscription' });
   }
-});
+  });
 
-app.get('/api/stripe/subscription', verifyFirebaseToken, async (req, res) => {
+  app.get('/api/stripe/subscription', verifyFirebaseToken, async (req, res) => {
   try {
     const { db } = require('./src/firebase_server');
     const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -629,9 +643,20 @@ app.get('/api/stripe/subscription', verifyFirebaseToken, async (req, res) => {
     console.error('Error fetching subscription:', error);
     sendStripeError(res, 500, 'Failed to fetch Stripe subscription');
   }
-});
+  });
+} else {
+  app.get('/api/subscription/current', verifyFirebaseToken, async (req, res) => {
+    // Stripe disabled: always return no subscription
+    res.json({ subscription: null });
+  });
 
-app.post('/api/stripe/checkout', verifyFirebaseToken, async (req, res) => {
+  app.get('/api/stripe/subscription', verifyFirebaseToken, async (req, res) => {
+    res.json({ subscription: null });
+  });
+}
+
+if (ENABLE_STRIPE) {
+  app.post('/api/stripe/checkout', verifyFirebaseToken, async (req, res) => {
   try {
     const { priceId } = req.body || {};
     if (!priceId) {
@@ -662,9 +687,9 @@ app.post('/api/stripe/checkout', verifyFirebaseToken, async (req, res) => {
     console.error('Checkout error:', error);
     sendStripeError(res, 500, 'Failed to create Stripe checkout session');
   }
-});
+  });
 
-app.post('/api/stripe/custom-checkout', verifyFirebaseToken, async (req, res) => {
+  app.post('/api/stripe/custom-checkout', verifyFirebaseToken, async (req, res) => {
   try {
     const { priceId } = req.body || {};
     if (!priceId) {
@@ -701,9 +726,9 @@ app.post('/api/stripe/custom-checkout', verifyFirebaseToken, async (req, res) =>
     console.error('Custom checkout error:', error);
     sendStripeError(res, 500, 'Failed to create Stripe custom checkout');
   }
-});
+  });
 
-app.post('/api/stripe/portal', verifyFirebaseToken, async (req, res) => {
+  app.post('/api/stripe/portal', verifyFirebaseToken, async (req, res) => {
   try {
     const { stripeClient, customerId } = await resolveStripeCustomer(req, {
       createIfMissing: false,
@@ -724,7 +749,12 @@ app.post('/api/stripe/portal', verifyFirebaseToken, async (req, res) => {
     console.error('Portal error:', error);
     sendStripeError(res, 500, 'Failed to create Stripe billing portal session');
   }
-});
+  });
+} else {
+  app.post('/api/stripe/checkout', verifyFirebaseToken, (_req, res) => sendStripeError(res, 503, 'Stripe integration disabled'));
+  app.post('/api/stripe/custom-checkout', verifyFirebaseToken, (_req, res) => sendStripeError(res, 503, 'Stripe integration disabled'));
+  app.post('/api/stripe/portal', verifyFirebaseToken, (_req, res) => sendStripeError(res, 503, 'Stripe integration disabled'));
+}
 
 registerChatRoutes(app);
 
