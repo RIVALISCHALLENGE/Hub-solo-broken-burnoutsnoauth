@@ -17,13 +17,14 @@
     <script>
       if ("serviceWorker" in navigator) {
         const isLocalhost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+
         if (isLocalhost) {
           navigator.serviceWorker.getRegistrations().then((registrations) => {
             registrations.forEach((registration) => registration.unregister());
           });
         } else {
           window.addEventListener("load", () => {
-            navigator.serviceWorker.register("/sw.js").then(reg => {
+            navigator.serviceWorker.register("/sw.js").then((reg) => {
               if (reg.waiting) {
                 reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                 window.location.reload();
@@ -39,6 +40,9 @@
                   });
                 }
               });
+            }).catch(() => {
+              // fallback: attempt a simple register without handling updates
+              try { navigator.serviceWorker.register('/sw.js'); } catch (e) {}
             });
           });
         }

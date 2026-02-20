@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAccessibility } from '../../context/AccessibilityContext';
 
@@ -6,6 +7,17 @@ export const VoiceNavigator = () => {
   const [isListening, setIsListening] = useState(false);
 
   const startListening = useCallback(() => {
+=======
+import React, { useState, useCallback } from 'react';
+import { useAccessibility } from '../../context/AccessibilityContext';
+
+export const VoiceNavigator = () => {
+  const { isEnabled, speak } = useAccessibility();
+  const [isListening, setIsListening] = useState(false);
+
+  const startListening = useCallback(() => {
+    if (typeof window === 'undefined') return;
+>>>>>>> fix/test-live-mode-script
     if (!('webkitSpeechRecognition' in window)) {
       speak("Speech recognition not supported in this browser.");
       return;
@@ -18,11 +30,38 @@ export const VoiceNavigator = () => {
 
     recognition.onstart = () => {
       setIsListening(true);
+<<<<<<< HEAD
       speak("Listening");
+=======
+      speak('Listening');
+>>>>>>> fix/test-live-mode-script
+    };
+import React, { useState, useCallback } from 'react';
+import { useAccessibility } from '../../context/AccessibilityContext';
+
+export const VoiceNavigator = () => {
+  const { isEnabled, speak } = useAccessibility();
+  const [isListening, setIsListening] = useState(false);
+
+  const startListening = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (!('webkitSpeechRecognition' in window)) {
+      speak('Speech recognition not supported in this browser.');
+      return;
+    }
+
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      speak('Listening');
     };
 
     recognition.onresult = (event) => {
-      const command = event.results[0][0].transcript.toLowerCase();
+      const command = (event.results?.[0]?.[0]?.transcript || '').toLowerCase();
       handleCommand(command);
     };
 
@@ -39,12 +78,13 @@ export const VoiceNavigator = () => {
   }, [speak]);
 
   const handleCommand = (command) => {
+    if (!command) return speak("Sorry, I didn't hear anything.");
     if (command.includes('go to') || command.includes('navigate to')) {
       const destination = command.replace('go to', '').replace('navigate to', '').trim();
       speak(`Navigating to ${destination}`);
       const elements = document.querySelectorAll('a, button');
       for (const el of elements) {
-        if (el.innerText.toLowerCase().includes(destination)) {
+        if (el.innerText && el.innerText.toLowerCase().includes(destination)) {
           el.click();
           return;
         }
@@ -61,7 +101,7 @@ export const VoiceNavigator = () => {
   if (!isEnabled) return null;
 
   return (
-    <div 
+    <div
       style={{
         position: 'fixed',
         bottom: '20px',
@@ -86,3 +126,5 @@ export const VoiceNavigator = () => {
     </div>
   );
 };
+
+export default VoiceNavigator;

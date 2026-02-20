@@ -10,6 +10,7 @@
     "start:bot-sim": "node src/services/runBotSim.js"
   },
   "dependencies": {
+    
     "@emoji-mart/data": "^1.2.1",
     "@emoji-mart/react": "^1.1.1",
     "@google-cloud/storage": "^7.19.0",
