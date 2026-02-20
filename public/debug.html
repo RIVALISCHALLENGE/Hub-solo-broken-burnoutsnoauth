@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>App Debug</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:16px;color:#111;background:#fff}
+    pre{background:#f5f5f5;padding:12px;border-radius:6px;overflow:auto;max-height:48vh}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    button{padding:8px 10px;border-radius:6px;border:1px solid #ccc;background:#eee}
+    h1{margin:0 0 12px 0}
+    label{font-weight:600;margin-right:6px}
+    input{padding:6px;border-radius:6px;border:1px solid #ccc}
+  </style>
+</head>
+<body>
+  <h1>App Debug</h1>
+  <div class="row">
+    <button id="btnDump">Show runtime info</button>
+    <button id="btnIdtk">Test identitytoolkit lookup</button>
+    <button id="btnUnregSW">Unregister service workers</button>
+    <button id="btnClearLog">Clear captured console</button>
+    <button id="btnCopy">Copy output</button>
+    <label for="apiKey">API key (optional):</label>
+    <input id="apiKey" style="min-width:240px" placeholder="leave empty to use detected" />
+  </div>
+  <div>
+    <h3>Captured console errors/warnings</h3>
+    <pre id="consoleLog">(none)</pre>
+  </div>
+  <div>
+    <h3>Runtime info</h3>
+    <pre id="out">(press "Show runtime info")</pre>
+  </div>
+  <script src="/debug.js"></script>
+</body>
+</html>
