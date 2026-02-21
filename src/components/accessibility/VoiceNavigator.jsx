@@ -1,92 +1,100 @@
-import React, { useState, useCallback } from 'react';
-import { useAccessibility } from '../../context/AccessibilityContext';
+import React, { useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAccessibility } from "../../context/AccessibilityContext";
 
-export const VoiceNavigator = () => {
-  const { isEnabled, speak } = useAccessibility();
-  const [isListening, setIsListening] = useState(false);
+export function VoiceNavigator() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {
+    voiceEnabled,
+    speak,
+    addHistory,
+    randomLine
+  } = useAccessibility();
 
-  const startListening = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    if (!('webkitSpeechRecognition' in window)) {
-      speak('Speech recognition not supported in this browser.');
+  useEffect(() => {
+    if (!voiceEnabled) return;
+
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      speak("Voice not supported here.");
       return;
     }
 
-    const recognition = new window.webkitSpeechRecognition();
-    recognition.continuous = false;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      speak('Listening');
-    };
+    recognition.lang = "en-US";
 
     recognition.onresult = (event) => {
-      const command = (event.results?.[0]?.[0]?.transcript || '').toLowerCase();
-      handleCommand(command);
-    };
+      const result = event.results[event.results.length - 1];
+      const transcript = result[0].transcript.toLowerCase();
+      const confidence = result[0].confidence;
 
-    recognition.onerror = (event) => {
-      console.error('Speech error:', event.error);
-      setIsListening(false);
-    };
+      addHistory(transcript, confidence);
 
-    recognition.onend = () => {
-      setIsListening(false);
+      if (confidence < 0.6) {
+        speak("Speak with confidence.");
+        return;
+      }
+
+      if (transcript.includes("help")) {
+        speak(
+          "Say things like: take me to dashboard. Read headings. Click login. Fill email with your address."
+        );
+        return;
+      }
+
+      if (transcript.includes("where am i")) {
+        const page = location.pathname.replace("/", "") || "home";
+        speak(`You’re on ${page}. Stay locked in.`);
+        return;
+      }
+
+      if (transcript.includes("dashboard")) {
+        navigate("/dashboard");
+        speak(randomLine("navigation"));
+        return;
+      }
+
+      if (transcript.includes("admin")) {
+        navigate("/admin/metrics");
+        speak("Admin console loaded. Stay sharp.");
+        return;
+      }
+
+      if (transcript.includes("login")) {
+        navigate("/login");
+        speak(randomLine("navigation"));
+        return;
+      }
+
+      if (transcript.includes("click")) {
+        const target = transcript.replace("click", "").trim();
+        const buttons = document.querySelectorAll("button");
+
+        let clicked = false;
+
+        buttons.forEach((btn) => {
+          if (btn.innerText.toLowerCase().includes(target)) {
+            btn.click();
+            clicked = true;
+          }
+        });
+
+        speak(clicked ? randomLine("navigation") : randomLine("error"));
+        return;
+      }
+
+      speak(randomLine("error"));
     };
 
     recognition.start();
-  }, [speak]);
 
-  const handleCommand = (command) => {
-    if (!command) return speak("Sorry, I didn't hear anything.");
-    if (command.includes('go to') || command.includes('navigate to')) {
-      const destination = command.replace('go to', '').replace('navigate to', '').trim();
-      speak(`Navigating to ${destination}`);
-      const elements = document.querySelectorAll('a, button');
-      for (const el of elements) {
-        if (el.innerText && el.innerText.toLowerCase().includes(destination)) {
-          el.click();
-          return;
-        }
-      }
-      speak(`Could not find ${destination}`);
-    } else if (command.includes('read screen')) {
-      const text = document.body.innerText;
-      speak(text);
-    } else {
-      speak(`I heard ${command}, but I don't know how to handle that yet.`);
-    }
-  };
+    return () => recognition.stop();
+  }, [voiceEnabled, navigate, location, speak, addHistory, randomLine]);
 
-  if (!isEnabled) return null;
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: '20px',
-        right: '20px',
-        zIndex: 10000,
-        background: isListening ? 'red' : 'blue',
-        color: 'white',
-        padding: '10px',
-        borderRadius: '50%',
-        cursor: 'pointer',
-        width: '60px',
-        height: '60px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-      }}
-      onClick={startListening}
-      aria-label="Voice Navigation"
-    >
-      {isListening ? '🎤' : '🗣️'}
-    </div>
-  );
-};
-
-export default VoiceNavigator;
+  return null;
+}
