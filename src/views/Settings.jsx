@@ -70,7 +70,7 @@ export default function Settings() {
       <div style={{ marginTop: 40 }}>
         <h3>Billing & Subscription</h3>
         <button onClick={openBillingPortal} disabled={billingLoading} style={{ padding: "8px 20px", background: "#222", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
-          {billingLoading ? "Loading..." : "Open Stripe Billing Portal"}
+          {/* Stripe integration removed. Billing portal disabled. */}
         </button>
         {billingError && <div style={{ color: "#ff3050", marginTop: 8 }}>{billingError}</div>}
       </div>

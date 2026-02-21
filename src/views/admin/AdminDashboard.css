@@ -1,0 +1,43 @@
+.admin-dashboard {
+  display: flex;
+  min-height: 100vh;
+  background: #181a20;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+}
+.admin-sidebar {
+  width: 220px;
+  background: #23262f;
+  padding: 32px 16px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+}
+.admin-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 24px;
+  letter-spacing: 1px;
+  color: #ff3050;
+}
+.admin-nav-link {
+  display: block;
+  padding: 12px 18px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.admin-nav-link.active, .admin-nav-link:hover {
+  background: #ff3050;
+  color: #fff;
+}
+.admin-main {
+  flex: 1;
+  padding: 40px 32px;
+  background: #181a20;
+  min-height: 100vh;
+}

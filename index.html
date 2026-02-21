@@ -52,32 +52,7 @@
 
   <body>
     <div id="root"></div>
-    <script type="module" src="/public/stripeCheckout.js"></script>
-    <script type="module">
-      import { startStripeCheckout } from '/public/stripeCheckout.js';
-      const publishableKey = 'pk_test_12345'; // TODO: Replace with your Stripe publishable key
-      // List your available price options here
-      const priceOptions = [
-        { id: 'price_abc123', label: 'Basic ($10)' },
-        { id: 'price_def456', label: 'Premium ($25)' },
-        { id: 'price_ghi789', label: 'Ultimate ($50)' }
-      ];
-      const select = document.createElement('select');
-      priceOptions.forEach(opt => {
-        const option = document.createElement('option');
-        option.value = opt.id;
-        option.text = opt.label;
-        select.appendChild(option);
-      });
-      document.body.appendChild(select);
-      const btn = document.createElement('button');
-      btn.innerText = 'Pay with Stripe';
-      btn.onclick = () => {
-        const selectedPriceId = select.value;
-        startStripeCheckout(publishableKey, selectedPriceId);
-      };
-      document.body.appendChild(btn);
-    </script>
+    <!-- Stripe integration fully removed. -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

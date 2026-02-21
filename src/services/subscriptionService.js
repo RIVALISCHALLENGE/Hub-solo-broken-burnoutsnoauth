@@ -12,58 +12,36 @@ async function getAuthHeaders() {
 
 export const SubscriptionService = {
   async getPublishableKey() {
-    const res = await fetch("/api/stripe/publishable-key");
-    if (!res.ok) throw new Error("Failed to fetch publishable key");
-    const data = await res.json();
-    return data.publishableKey;
+      // Stripe integration removed. All subscription API calls are now disabled.
+      throw new Error("Stripe integration removed.");
   },
 
   async getProducts() {
-    const res = await fetch("/api/stripe/products");
-    if (!res.ok) throw new Error("Failed to fetch products");
-    const data = await res.json();
-    return data.products;
+      // Stripe integration removed. All subscription API calls are now disabled.
+      throw new Error("Stripe integration removed.");
   },
 
   async getSubscription() {
     const headers = await getAuthHeaders();
-    const res = await fetch("/api/stripe/subscription", { headers });
-    if (!res.ok) throw new Error("Failed to check subscription");
-    const data = await res.json();
-    return data.subscription;
+      // Stripe integration removed. All subscription API calls are now disabled.
+      throw new Error("Stripe integration removed.");
   },
 
   async createCheckout(priceId) {
     const headers = await getAuthHeaders();
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ priceId }),
-    });
-    if (!res.ok) throw new Error("Failed to create checkout");
-    const data = await res.json();
-    return data.url;
+      // Stripe integration removed. All subscription API calls are now disabled.
+      throw new Error("Stripe integration removed.");
   },
 
   async createCustomCheckout(priceId) {
     const headers = await getAuthHeaders();
-    const res = await fetch("/api/stripe/custom-checkout", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ priceId }),
-    });
-    if (!res.ok) throw new Error("Failed to create custom checkout");
-    return res.json();
+      // Stripe integration removed. All subscription API calls are now disabled.
+      throw new Error("Stripe integration removed.");
   },
 
   async openPortal() {
     const headers = await getAuthHeaders();
-    const res = await fetch("/api/stripe/portal", {
-      method: "POST",
-      headers,
-    });
-    if (!res.ok) throw new Error("Failed to open portal");
-    const data = await res.json();
-    return data.url;
+      // Stripe integration removed. All subscription API calls are now disabled.
+      throw new Error("Stripe integration removed.");
   },
 };

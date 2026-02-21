@@ -33,16 +33,11 @@ export default function Dashboard() {
       { id: "run", name: "Run", image: "/assets/images/run.png.png", link: "/run", external: false },
       { id: "raffle", name: "Raffle", image: "/assets/images/raffle.png.png", link: "/raffle", external: false },
       { id: "shop", name: "Merch", image: "/assets/images/shop.png.png", link: "/shop", external: false },
-      { id: "soon", name: "Soon", image: "/assets/images/comingsoon.png.png", link: "#", external: false, comingSoon: true },
     ],
     []
   );
 
   const handleClick = (mode) => {
-    if (mode.comingSoon) {
-      setShowComingSoon(true);
-      return;
-    }
     if (mode.external) {
       if (typeof window.launchGame === 'function') {
         window.launchGame(mode.link);
@@ -142,21 +137,7 @@ export default function Dashboard() {
         })}
       </div>
 
-      {showComingSoon && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
-          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)" }} onClick={() => setShowComingSoon(false)} />
-          <div style={{ position: "relative", width: "100%", maxWidth: "320px", borderRadius: "16px", border: `1px solid ${t.tileBorder}`, background: "rgba(10,10,10,0.95)", padding: "20px" }}>
-            <div style={{ fontSize: "18px", fontWeight: 700, color: "#fff" }}>Coming Soon</div>
-            <div style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px", marginTop: "4px" }}>New modes + upgrades are on the way.</div>
-            <button
-              onClick={() => setShowComingSoon(false)}
-              style={{ marginTop: "16px", width: "100%", padding: "8px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.8)", cursor: "pointer", fontSize: "14px" }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Removed Coming Soon modal. All modes shown are fully functional. */}
     </div>
   );
 }

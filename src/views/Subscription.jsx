@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { loadStripe } from "@stripe/stripe-js";
+// Stripe integration removed. Payment and checkout are disabled.
 import { SubscriptionService } from "../services/subscriptionService.js";
 import { useTheme } from "../context/ThemeContext.jsx";
 
@@ -13,15 +12,7 @@ export default function Subscription({ user, userProfile }) {
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(null);
-  const [publishableKey, setPublishableKey] = useState("");
-  const [stripePromise, setStripePromise] = useState(null);
-  const [clientSecret, setClientSecret] = useState("");
-  const [selectedPriceId, setSelectedPriceId] = useState(null);
-  const [paymentError, setPaymentError] = useState("");
-  const [checkoutInfo, setCheckoutInfo] = useState("");
-  const [billingPeriod, setBillingPeriod] = useState("month");
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [showCanceled, setShowCanceled] = useState(false);
+  // Stripe integration removed. Payment and checkout are disabled.
 
   useEffect(() => {
     if (searchParams.get("success") === "true") {
@@ -37,17 +28,12 @@ export default function Subscription({ user, userProfile }) {
   useEffect(() => {
     async function load() {
       try {
-        const [prods, sub, key] = await Promise.all([
+        const [prods, sub] = await Promise.all([
           SubscriptionService.getProducts(),
           SubscriptionService.getSubscription(),
-          SubscriptionService.getPublishableKey(),
         ]);
         setProducts(prods);
         setSubscription(sub);
-        setPublishableKey(key || "");
-        if (key) {
-          setStripePromise(loadStripe(key));
-        }
       } catch (err) {
         console.error("Failed to load subscription data:", err);
       } finally {
@@ -486,154 +472,14 @@ export default function Subscription({ user, userProfile }) {
             <div style={styles.spinner} />
             <p style={{ color: "#aaa", marginTop: 12 }}>Loading plans...</p>
           </div>
-        ) : isActive ? (
-          <div style={styles.activeCard}>
-            <div style={styles.activeBadge}>ACTIVE</div>
-            <h2 style={styles.activeTitle}>You're a Rivalis Pro member!</h2>
-            <p style={styles.activeSubtext}>
-              Enjoy ad-free workouts, AI coaching, and all premium features.
-            </p>
-            {subscription.cancel_at_period_end && (
-              <p style={styles.cancelNotice}>
-                Your subscription will end on{" "}
-                {new Date(subscription.current_period_end * 1000).toLocaleDateString()}
-              </p>
-            )}
-            <button onClick={handleManage} style={styles.manageBtn}>
-              Manage Subscription
-            </button>
-          </div>
         ) : (
-          <>
-            {rivalisProduct && (monthlyPrice || annualPrice) && (
-              <div style={styles.pricingSection}>
-                <div style={styles.toggleRow}>
-                  <button
-                    onClick={() => setBillingPeriod("month")}
-                    style={{
-                      ...styles.toggleBtn,
-                      ...(billingPeriod === "month" ? styles.toggleActive : {}),
-                    }}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    onClick={() => setBillingPeriod("year")}
-                    style={{
-                      ...styles.toggleBtn,
-                      ...(billingPeriod === "year" ? styles.toggleActive : {}),
-                    }}
-                  >
-                    Annual
-                    <span style={styles.saveBadge}>Save 33%</span>
-                  </button>
-                </div>
-
-                <div style={styles.priceCard}>
-                  <div style={styles.priceGlow} />
-                  <div style={{ position: "relative", zIndex: 1 }}>
-                    {billingPeriod === "month" && monthlyPrice && (
-                      <>
-                        <div style={styles.priceAmount}>
-                          ${(getPriceAmount(monthlyPrice) / 100).toFixed(2)}
-                          <span style={styles.priceInterval}>/month</span>
-                        </div>
-                        <button
-                          onClick={() => handleCheckout(monthlyPrice.id)}
-                          disabled={checkoutLoading === monthlyPrice.id}
-                          style={{
-                            ...styles.subscribeBtn,
-                            opacity: checkoutLoading === monthlyPrice.id ? 0.6 : 1,
-                          }}
-                        >
-                          {checkoutLoading === monthlyPrice.id
-                            ? "Preparing Checkout..."
-                            : "Subscribe Now"}
-                        </button>
-                        {selectedPriceId === monthlyPrice.id && clientSecret && stripePromise && (
-                          <div style={styles.paymentPanel}>
-                            <Elements
-                              stripe={stripePromise}
-                              options={{
-                                clientSecret,
-                                appearance: {
-                                  theme: "night",
-                                },
-                              }}
-                            >
-                              <CustomCheckoutForm
-                                styles={styles}
-                                onSuccess={handlePaymentSuccess}
-                                onCancel={handlePaymentCancel}
-                                onError={setPaymentError}
-                              />
-                            </Elements>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {billingPeriod === "year" && annualPrice && (
-                      <>
-                        <div style={styles.priceAmount}>
-                          ${(getPriceAmount(annualPrice) / 100).toFixed(2)}
-                          <span style={styles.priceInterval}>/year</span>
-                        </div>
-                        <div style={styles.savingsNote}>
-                          That's just ${(getPriceAmount(annualPrice) / 100 / 12).toFixed(2)}/month
-                        </div>
-                        <button
-                          onClick={() => handleCheckout(annualPrice.id)}
-                          disabled={checkoutLoading === annualPrice.id}
-                          style={{
-                            ...styles.subscribeBtn,
-                            opacity: checkoutLoading === annualPrice.id ? 0.6 : 1,
-                          }}
-                        >
-                          {checkoutLoading === annualPrice.id
-                            ? "Preparing Checkout..."
-                            : "Subscribe Now"}
-                        </button>
-                        {selectedPriceId === annualPrice.id && clientSecret && stripePromise && (
-                          <div style={styles.paymentPanel}>
-                            <Elements
-                              stripe={stripePromise}
-                              options={{
-                                clientSecret,
-                                appearance: {
-                                  theme: "night",
-                                },
-                              }}
-                            >
-                              <CustomCheckoutForm
-                                styles={styles}
-                                onSuccess={handlePaymentSuccess}
-                                onCancel={handlePaymentCancel}
-                                onError={setPaymentError}
-                              />
-                            </Elements>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {checkoutInfo && <div style={styles.checkoutInfo}>{checkoutInfo}</div>}
-                    {paymentError && <div style={styles.paymentError}>{paymentError}</div>}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div style={styles.featuresGrid}>
-              {features.map((f, i) => (
-                <div key={i} style={styles.featureCard}>
-                  <span style={styles.featureIcon}>{f.icon}</span>
-                  <div>
-                    <div style={styles.featureTitle}>{f.title}</div>
-                    <div style={styles.featureDesc}>{f.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+          <div style={styles.activeCard}>
+            <div style={styles.activeBadge}>SUBSCRIPTION UNAVAILABLE</div>
+            <h2 style={styles.activeTitle}>Rivalis Pro is not available for purchase at this time.</h2>
+            <p style={styles.activeSubtext}>
+              Payment and checkout have been disabled. Please check back later.
+            </p>
+          </div>
         )}
       </div>
     </div>
