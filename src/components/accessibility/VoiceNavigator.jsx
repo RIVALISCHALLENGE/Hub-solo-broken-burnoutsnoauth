@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAccessibility } from "../../context/AccessibilityContext";
 
@@ -7,6 +7,8 @@ export function VoiceNavigator() {
   const location = useLocation();
   const { voiceEnabled, speak, addHistory, randomLine } = useAccessibility();
 
+  const recognitionRef = useRef(null);
+
   useEffect(() => {
     if (!voiceEnabled) return;
 
@@ -14,8 +16,13 @@ export function VoiceNavigator() {
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      speak("Voice recognition not supported in this browser.");
+      speak("Voice recognition not supported.");
       return;
+    }
+
+    // Stop any previous instance
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
     }
 
     const recognition = new SpeechRecognition();
@@ -23,75 +30,76 @@ export function VoiceNavigator() {
     recognition.interimResults = false;
     recognition.lang = "en-US";
 
-    const routes = {
-      dashboard: "/dashboard",
-      login: "/login",
-      admin: "/admin/metrics",
-    };
+    recognitionRef.current = recognition;
 
-    const normalize = (text) => {
-      return text
-        .toLowerCase()
-        .replace(/[.,!?]/g, "")
-        .replace("take me to", "")
-        .replace("go to", "")
-        .replace("open", "")
-        .replace("please", "")
-        .trim();
-    };
+    // Auto read page content when activated
+    setTimeout(() => {
+      const headings = document.querySelectorAll("h1, h2");
+      if (headings.length) {
+        const text = Array.from(headings)
+          .map((h) => h.innerText)
+          .join(". ");
+        speak(`You are on ${location.pathname.replace("/", "")}. ${text}`);
+      }
+    }, 500);
 
     recognition.onresult = (event) => {
       const result = event.results[event.results.length - 1];
-      const transcriptRaw = result[0].transcript;
+      const transcript = result[0].transcript.toLowerCase();
       const confidence = result[0].confidence;
 
-      addHistory(transcriptRaw, confidence);
+      console.log("Heard:", transcript, "Confidence:", confidence);
 
-      const transcript = normalize(transcriptRaw);
+      addHistory(transcript, confidence);
 
-      if (confidence < 0.5) {
-        speak("Say that again clearly.");
+      if (confidence < 0.4) {
+        speak("Speak clearly.");
         return;
       }
 
       if (transcript.includes("help")) {
         speak(
-          "You can say things like: take me to dashboard, go to admin, where am I, read headings, click login, or fill email with your address."
+          "You can say dashboard, admin, login, where am I, read page, click button name, or fill field with value."
         );
         return;
       }
 
       if (transcript.includes("where am i")) {
-        const page = location.pathname.replace("/", "") || "home";
-        speak(`You’re on ${page}.`);
+        speak(`You are on ${location.pathname.replace("/", "")}.`);
         return;
       }
 
-      if (transcript.includes("read headings")) {
+      if (transcript.includes("read page")) {
         const headings = document.querySelectorAll("h1, h2, h3");
         if (!headings.length) {
           speak("No headings found.");
           return;
         }
-
         const text = Array.from(headings)
           .map((h) => h.innerText)
           .join(". ");
-
         speak(text);
         return;
       }
 
-      // Route matching
-      for (let key in routes) {
-        if (transcript.includes(key)) {
-          navigate(routes[key]);
-          speak(randomLine("navigation"));
-          return;
-        }
+      if (transcript.includes("dashboard")) {
+        navigate("/dashboard");
+        speak(randomLine("navigation"));
+        return;
       }
 
-      // Click button
+      if (transcript.includes("admin")) {
+        navigate("/admin/metrics");
+        speak(randomLine("navigation"));
+        return;
+      }
+
+      if (transcript.includes("login")) {
+        navigate("/login");
+        speak(randomLine("navigation"));
+        return;
+      }
+
       if (transcript.startsWith("click")) {
         const target = transcript.replace("click", "").trim();
         const buttons = document.querySelectorAll("button");
@@ -105,42 +113,20 @@ export function VoiceNavigator() {
           }
         });
 
-        speak(found ? randomLine("navigation") : randomLine("error"));
+        speak(found ? randomLine("navigation") : "Button not found.");
         return;
       }
 
-      // Fill form
-      if (transcript.startsWith("fill")) {
-        const parts = transcript.replace("fill", "").split("with");
-
-        if (parts.length === 2) {
-          const fieldName = parts[0].trim();
-          const value = parts[1].trim();
-          const inputs = document.querySelectorAll("input");
-
-          let filled = false;
-
-          inputs.forEach((input) => {
-            if (
-              input.name?.toLowerCase().includes(fieldName) ||
-              input.placeholder?.toLowerCase().includes(fieldName)
-            ) {
-              input.value = value;
-              input.dispatchEvent(new Event("input", { bubbles: true }));
-              filled = true;
-            }
-          });
-
-          speak(filled ? "Field filled." : "Field not found.");
-          return;
-        }
-      }
-
-      speak(randomLine("error"));
+      speak("Command not recognized.");
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (err) => {
+      console.log("Recognition error:", err);
       recognition.stop();
+      recognition.start();
+    };
+
+    recognition.onend = () => {
       recognition.start();
     };
 
